@@ -3,18 +3,16 @@ import BottomNav from "@/components/layout/BottomNav";
 import MobileAppShell from "@/components/layout/MobileAppShell";
 import TopCourtBar from "@/components/layout/TopCourtBar";
 import CourtCard from "@/components/courts/CourtCard";
+import type { CourtsOverviewData } from "@/lib/data/courts";
 
-const courts = [
-  {
-    id: "1",
-    name: "สนามที่ 1",
-  },
-];
+type CourtsOverviewScreenProps = {
+  data: CourtsOverviewData;
+};
 
-export default function CourtsOverviewScreen() {
+const CourtsOverviewScreen = ({ data }: CourtsOverviewScreenProps) => {
   return (
     <MobileAppShell>
-      <TopCourtBar label="สนามทั้งหมด" />
+      <TopCourtBar label={data.groupLabel} />
 
       <section className="px-4 pt-[22px]">
         <div className="mb-[19px] flex items-center justify-between">
@@ -35,8 +33,16 @@ export default function CourtsOverviewScreen() {
         </div>
 
         <div className="space-y-4">
-          {courts.map(function renderCourt(court) {
-            return <CourtCard key={court.id} id={court.id} name={court.name} />;
+          {data.courts.map((court) => {
+            return (
+              <CourtCard
+                key={court.id}
+                id={court.id}
+                name={court.name}
+                status={court.status}
+                playerCount={court.playerCount}
+              />
+            );
           })}
         </div>
       </section>
@@ -44,4 +50,6 @@ export default function CourtsOverviewScreen() {
       <BottomNav />
     </MobileAppShell>
   );
-}
+};
+
+export default CourtsOverviewScreen;

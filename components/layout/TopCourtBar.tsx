@@ -7,11 +7,11 @@ type TopCourtBarProps = {
   detailMode?: boolean;
 };
 
-export default function TopCourtBar({
+const TopCourtBar = ({
   label,
   showBack = false,
   detailMode = false,
-}: TopCourtBarProps) {
+}: TopCourtBarProps) => {
   return (
     <div className="flex h-12 items-center gap-[14px] px-4">
       {showBack ? (
@@ -29,4 +29,6 @@ export default function TopCourtBar({
       <IconButton alt="สนาม" icon="/icons/court.svg" />
     </div>
   );
-}
+};
+
+export default TopCourtBar;

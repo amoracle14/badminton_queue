@@ -4,9 +4,11 @@ import Link from "next/link";
 type CourtCardProps = {
   id: string;
   name: string;
+  status: string;
+  playerCount: number;
 };
 
-export default function CourtCard({ id, name }: CourtCardProps) {
+const CourtCard = ({ id, name, status, playerCount }: CourtCardProps) => {
   return (
     <Link
       href={`/courts/${id}`}
@@ -23,7 +25,7 @@ export default function CourtCard({ id, name }: CourtCardProps) {
       </div>
 
       <div className="flex h-[105px] items-center justify-center">
-        <span className="text-[32px] font-bold text-[#CBCBCB]">ว่าง</span>
+        <span className="text-[32px] font-bold text-[#CBCBCB]">{status}</span>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -38,9 +40,11 @@ export default function CourtCard({ id, name }: CourtCardProps) {
             width={24}
             height={24}
           />
-          <span>จำนวน 0 คน</span>
+          <span>จำนวน {playerCount} คน</span>
         </div>
       </div>
     </Link>
   );
-}
+};
+
+export default CourtCard;

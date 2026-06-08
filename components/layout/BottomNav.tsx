@@ -28,7 +28,7 @@ const navItems = [
   },
 ];
 
-export default function BottomNav() {
+const BottomNav = () => {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30 mx-auto h-[88px] w-full max-w-[440px] rounded-t-[14px] bg-white shadow-[0_-8px_28px_rgba(64,169,255,0.08)]">
       <div className="grid h-full grid-cols-4 px-3 pt-[14px]">
@@ -61,4 +61,6 @@ export default function BottomNav() {
       </div>
     </nav>
   );
-}
+};
+
+export default BottomNav;

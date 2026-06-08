@@ -4,7 +4,7 @@ type CourtSelectorPillProps = {
   label: string;
 };
 
-export default function CourtSelectorPill({ label }: CourtSelectorPillProps) {
+const CourtSelectorPill = ({ label }: CourtSelectorPillProps) => {
   return (
     <button
       type="button"
@@ -17,4 +17,6 @@ export default function CourtSelectorPill({ label }: CourtSelectorPillProps) {
       <span className="ml-3 size-[8px] rotate-45 border-b-2 border-r-2 border-[#1597F5]" />
     </button>
   );
-}
+};
+
+export default CourtSelectorPill;
