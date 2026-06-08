@@ -8,12 +8,12 @@ type IconButtonProps = {
   children?: React.ReactNode;
 };
 
-export default function IconButton({
+const IconButton = ({
   alt,
   href,
   icon,
   children,
-}: IconButtonProps) {
+}: IconButtonProps) => {
   const className =
     "grid size-9 shrink-0 place-items-center rounded-full bg-white text-[#1597F5] shadow-[0_8px_24px_rgba(64,169,255,0.08)]";
   const content = icon ? (
@@ -35,4 +35,6 @@ export default function IconButton({
       {content}
     </button>
   );
-}
+};
+
+export default IconButton;

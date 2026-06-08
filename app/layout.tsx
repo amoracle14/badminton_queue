@@ -34,11 +34,11 @@ export const metadata: Metadata = {
   description: "Badminton court queue and scoring interface",
 };
 
-export default function RootLayout({
+const RootLayout = ({
   children,
 }: Readonly<{
   children: React.ReactNode;
-}>) {
+}>) => {
   return (
     <html
       lang="th"
@@ -47,4 +47,6 @@ export default function RootLayout({
       <body className="flex min-h-full flex-col">{children}</body>
     </html>
   );
-}
+};
+
+export default RootLayout;

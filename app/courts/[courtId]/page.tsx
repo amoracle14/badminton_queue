@@ -1,4 +1,7 @@
 import CourtDetailScreen from "@/components/courts/CourtDetailScreen";
+import { getCourtDetailData } from "@/lib/data/courts";
+
+export const dynamic = "force-dynamic";
 
 type CourtPageProps = {
   params: Promise<{
@@ -6,8 +9,11 @@ type CourtPageProps = {
   }>;
 };
 
-export default async function CourtPage({ params }: CourtPageProps) {
+const CourtPage = async ({ params }: CourtPageProps) => {
   const { courtId } = await params;
+  const courtData = await getCourtDetailData(courtId);
 
-  return <CourtDetailScreen courtName={`สนามที่ ${courtId}`} />;
-}
+  return <CourtDetailScreen data={courtData} />;
+};
+
+export default CourtPage;
