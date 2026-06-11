@@ -9,7 +9,7 @@ const UserQueueScreen = ({ groupCode }: UserQueueScreenProps) => {
   return (
     <UserAppShell>
       <section className="pt-8">
-        <p className="text-[14px] font-medium text-[#1D89E4]">User Queue</p>
+        <p className="text-[14px] font-medium text-[var(--color-primary)]">User Queue</p>
         <h1 className="mt-2 text-[28px] font-bold leading-tight text-[#222222]">
           คิวของก๊วน {groupCode}
         </h1>
@@ -22,7 +22,7 @@ const UserQueueScreen = ({ groupCode }: UserQueueScreenProps) => {
 
         <Link
           href={`/join/${groupCode}`}
-          className="mt-6 inline-flex text-[16px] font-semibold text-[#1D89E4]"
+          className="mt-6 inline-flex text-[16px] font-semibold text-[var(--color-primary)]"
         >
           กลับไปหน้าเข้าร่วม
         </Link>

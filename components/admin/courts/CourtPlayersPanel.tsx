@@ -2,8 +2,9 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState, type PointerEvent } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
+import { getTeamProfileSrc } from "@/lib/team-profiles";
 import type {
   CourtTeamSummary,
   CurrentMatchSummary,
@@ -14,6 +15,7 @@ type TeamSummary = {
   id: string;
   team: "A" | "B";
   wins: number;
+  teamProfile?: string | null;
   players: PlayerSummary[];
 };
 
@@ -47,6 +49,74 @@ type TeamListItem = {
 };
 
 const buildTeams = (players: PlayerSummary[]) => {
+  const playersWithTeam = players.filter((player) => {
+    return Boolean(player.teamId);
+  });
+
+  if (playersWithTeam.length > 0) {
+    const teamsById = new Map<
+      string,
+      {
+        queueOrder: number;
+        players: PlayerSummary[];
+      }
+    >();
+
+    playersWithTeam.forEach((player, index) => {
+      const teamId = player.teamId ?? `fallback-${index}`;
+      const currentTeam = teamsById.get(teamId);
+
+      if (currentTeam) {
+        currentTeam.players.push(player);
+        currentTeam.queueOrder = Math.min(
+          currentTeam.queueOrder,
+          player.queueOrder ?? Number.MAX_SAFE_INTEGER
+        );
+        return;
+      }
+
+      teamsById.set(teamId, {
+        queueOrder: player.queueOrder ?? Number.MAX_SAFE_INTEGER,
+        players: [player],
+      });
+    });
+
+    return Array.from(teamsById.entries())
+      .map(([teamId, team], index) => {
+        return {
+          id: teamId,
+          team: index === 0 ? ("A" as const) : ("B" as const),
+          wins: 0,
+          teamProfile: team.players[0]?.teamProfile,
+          players: team.players
+            .slice()
+            .sort((firstPlayer, secondPlayer) => {
+              return (firstPlayer.teamSlot ?? 0) - (secondPlayer.teamSlot ?? 0);
+            }),
+          queueOrder: team.queueOrder,
+        };
+      })
+      .filter((team) => {
+        return team.players.length > 0;
+      })
+      .sort((firstTeam, secondTeam) => {
+        if (firstTeam.queueOrder === secondTeam.queueOrder) {
+          return firstTeam.id.localeCompare(secondTeam.id);
+        }
+
+        return firstTeam.queueOrder - secondTeam.queueOrder;
+      })
+      .map((team, index) => {
+        return {
+          id: team.id,
+          team: index === 0 ? ("A" as const) : ("B" as const),
+          wins: team.wins,
+          teamProfile: team.teamProfile,
+          players: team.players,
+        };
+      });
+  }
+
   const teams: TeamSummary[] = [];
 
   for (let index = 0; index < players.length; index += 2) {
@@ -60,6 +130,7 @@ const buildTeams = (players: PlayerSummary[]) => {
       id: teamPlayers.map((player) => player.id).join("-"),
       team: teams.length === 0 ? "A" : "B",
       wins: 0,
+      teamProfile: teamPlayers[0]?.teamProfile,
       players: teamPlayers,
     });
   }
@@ -80,16 +151,46 @@ const buildCurrentTeams = (
       id: `${currentMatch.id}-${team.team}`,
       team: team.team,
       wins: team.wins,
+      teamProfile: team.teamProfile,
       players: team.players,
     };
   });
 };
 
-const TeamLogoPlaceholder = () => {
+const TeamLogoPlaceholder = ({
+  teamProfile,
+}: {
+  teamProfile?: string | null;
+}) => {
   return (
     <div className="grid size-[48px] place-items-center rounded-[10px] bg-[#F4FBFF] ring-1 ring-[#E6F5FF]">
-      <Image src="/icons/empty-players.svg" alt="" width={34} height={34} />
+      <Image
+        src={getTeamProfileSrc(teamProfile)}
+        alt=""
+        width={42}
+        height={36}
+        className="h-9 w-[42px] object-contain"
+      />
     </div>
+  );
+};
+
+const TrashMaskIcon = ({ className }: { className: string }) => {
+  return (
+    <span
+      aria-hidden="true"
+      className={`bg-current ${className}`}
+      style={{
+        WebkitMaskImage: "url('/icons/trash.svg')",
+        maskImage: "url('/icons/trash.svg')",
+        WebkitMaskRepeat: "no-repeat",
+        maskRepeat: "no-repeat",
+        WebkitMaskSize: "contain",
+        maskSize: "contain",
+        WebkitMaskPosition: "center",
+        maskPosition: "center",
+      }}
+    />
   );
 };
 
@@ -111,7 +212,7 @@ const WinBadge = ({
       onClick={() => {
         onTeamWin(team);
       }}
-      className="flex h-[108px] w-[69px] shrink-0 flex-col items-center justify-center rounded-[9px] bg-[#40A9FF] text-white shadow-[0_8px_18px_rgba(64,169,255,0.28)] transition active:scale-[0.98] disabled:opacity-70"
+      className="flex h-[108px] w-[69px] shrink-0 flex-col items-center justify-center rounded-[9px] bg-[var(--color-primary)] text-white shadow-[0_8px_18px_rgba(29,137,228,0.28)] transition active:scale-[0.98] disabled:opacity-70"
     >
       <Image src="/icons/trophy.svg" alt="" width={24} height={24} />
       <span className="mt-2 text-[17px] font-bold leading-none">WIN</span>
@@ -124,7 +225,7 @@ const WinBadge = ({
 
 const PlayerNames = ({ players }: { players: PlayerSummary[] }) => {
   return (
-    <div className="mt-[6px] space-y-[5px] text-center text-[14px] leading-none text-[#333333]">
+    <div className="mt-[6px] space-y-[5px] text-center text-[14px] leading-none text-[var(--color-text)]">
       <p>{players[0]?.name ?? "-"}</p>
       <p>{players[1]?.name ?? "-"}</p>
     </div>
@@ -153,7 +254,7 @@ const CurrentMatchCard = ({
       />
       <div className="flex min-w-0 flex-1 items-center justify-center gap-3 px-3">
         <div className="flex min-w-0 flex-1 flex-col items-center">
-          <TeamLogoPlaceholder />
+          <TeamLogoPlaceholder teamProfile={teamA?.teamProfile} />
           <PlayerNames players={teamA?.players ?? []} />
         </div>
         <Image
@@ -164,7 +265,7 @@ const CurrentMatchCard = ({
           className="shrink-0"
         />
         <div className="flex min-w-0 flex-1 flex-col items-center">
-          <TeamLogoPlaceholder />
+          <TeamLogoPlaceholder teamProfile={teamB?.teamProfile} />
           <PlayerNames players={teamB?.players ?? []} />
         </div>
       </div>
@@ -211,7 +312,7 @@ const TeamEditModal = ({
         >
           <Image src="/icons/close-small.svg" alt="" width={10} height={10} />
         </button>
-        <h2 className="text-center text-[20px] font-bold text-[#1D89E4]">
+        <h2 className="text-center text-[20px] font-bold text-[var(--color-primary)]">
           แก้ไขทีม
         </h2>
         <div className="mt-[28px] space-y-3">
@@ -221,7 +322,7 @@ const TeamEditModal = ({
               onPlayerOneChange(event.target.value);
             }}
             placeholder="ชื่อผู้เล่นคนที่ 1"
-            className="h-[43px] w-full rounded-[9px] border border-[#E3E3E3] bg-white px-[16px] text-[16px] text-[#333333] outline-none placeholder:text-[#C9C9C9] focus:border-[#40B7FF] focus:ring-1 focus:ring-[#40B7FF]"
+            className="h-[43px] w-full rounded-[9px] border border-[#E3E3E3] bg-white px-[16px] text-[16px] text-[var(--color-text)] outline-none placeholder:text-[#C9C9C9] focus:border-[var(--color-primary-accent)] focus:ring-1 focus:ring-[var(--color-primary-accent)]"
           />
           <input
             value={editingTeam.playerTwoName}
@@ -229,7 +330,7 @@ const TeamEditModal = ({
               onPlayerTwoChange(event.target.value);
             }}
             placeholder="ชื่อผู้เล่นคนที่ 2"
-            className="h-[43px] w-full rounded-[9px] border border-[#E3E3E3] bg-white px-[16px] text-[16px] text-[#333333] outline-none placeholder:text-[#C9C9C9] focus:border-[#40B7FF] focus:ring-1 focus:ring-[#40B7FF]"
+            className="h-[43px] w-full rounded-[9px] border border-[#E3E3E3] bg-white px-[16px] text-[16px] text-[var(--color-text)] outline-none placeholder:text-[#C9C9C9] focus:border-[var(--color-primary-accent)] focus:ring-1 focus:ring-[var(--color-primary-accent)]"
           />
         </div>
         {errorMessage ? (
@@ -241,7 +342,7 @@ const TeamEditModal = ({
           type="button"
           disabled={!canSave}
           onClick={onSave}
-          className="mt-[24px] flex h-[49px] w-full items-center justify-center gap-2 rounded-[9px] bg-[#2EA8FF] text-[16px] font-bold text-white disabled:bg-[#CCCCCC]"
+          className="mt-[24px] flex h-[49px] w-full items-center justify-center gap-2 rounded-[9px] bg-[var(--color-primary)] text-[16px] font-bold text-white disabled:bg-[#CCCCCC]"
         >
           <Image src="/icons/check-circle.svg" alt="" width={20} height={20} />
           {isSaving ? "กำลังบันทึก..." : "บันทึก"}
@@ -276,8 +377,8 @@ const TeamDeleteConfirmModal = ({
           <Image src="/icons/close-small.svg" alt="" width={10} height={10} />
         </button>
         <div className="px-6 pb-6 pt-8 text-center">
-          <div className="mx-auto grid size-[64px] place-items-center rounded-full bg-[#FFF1F3]">
-            <Image src="/icons/trash.svg" alt="" width={28} height={28} />
+          <div className="mx-auto grid size-[64px] place-items-center rounded-full bg-[var(--color-danger-soft)] text-[var(--color-danger)]">
+            <TrashMaskIcon className="size-7" />
           </div>
           <h2 className="mt-5 text-[22px] font-bold leading-none text-[#222222]">
             ลบทีมนี้ออกจากคิว?
@@ -287,7 +388,7 @@ const TeamDeleteConfirmModal = ({
           </p>
           <div className="mt-5 flex items-center justify-center gap-3 rounded-[12px] bg-[#F8FBFC] px-4 py-3">
             <Image src="/icons/users-team.svg" alt="" width={22} height={22} />
-            <span className="truncate text-[16px] font-bold text-[#333333]">
+            <span className="truncate text-[16px] font-bold text-[var(--color-text)]">
               {deletingTeam.team.players.map((player) => player.name).join(" - ")}
             </span>
           </div>
@@ -309,9 +410,9 @@ const TeamDeleteConfirmModal = ({
               type="button"
               disabled={isDeleting}
               onClick={onConfirm}
-              className="flex h-[48px] items-center justify-center gap-2 rounded-[10px] bg-[#FF2A3D] text-[16px] font-bold text-white shadow-[0_8px_18px_rgba(255,42,61,0.22)] disabled:opacity-60"
+              className="flex h-[48px] items-center justify-center gap-2 rounded-[10px] bg-[var(--color-danger)] text-[16px] font-bold text-white shadow-[0_8px_18px_rgba(245,34,45,0.22)] disabled:opacity-60"
             >
-              <Image src="/icons/trash.svg" alt="" width={20} height={20} />
+              <TrashMaskIcon className="size-5" />
               {isDeleting ? "กำลังลบ..." : "ลบทีม"}
             </button>
           </div>
@@ -346,8 +447,8 @@ const DeleteAllTeamsConfirmModal = ({
           <Image src="/icons/close-small.svg" alt="" width={10} height={10} />
         </button>
         <div className="px-6 pb-6 pt-8 text-center">
-          <div className="mx-auto grid size-[64px] place-items-center rounded-full bg-[#FFF1F3]">
-            <Image src="/icons/trash.svg" alt="" width={28} height={28} />
+          <div className="mx-auto grid size-[64px] place-items-center rounded-full bg-[var(--color-danger-soft)] text-[var(--color-danger)]">
+            <TrashMaskIcon className="size-7" />
           </div>
           <h2 className="mt-5 text-[22px] font-bold leading-none text-[#222222]">
             ลบทีมทั้งหมดในคอร์ทนี้?
@@ -374,9 +475,9 @@ const DeleteAllTeamsConfirmModal = ({
               type="button"
               disabled={isDeleting}
               onClick={onConfirm}
-              className="flex h-[48px] items-center justify-center gap-2 rounded-[10px] bg-[#FF2A3D] text-[16px] font-bold text-white shadow-[0_8px_18px_rgba(255,42,61,0.22)] disabled:opacity-60"
+              className="flex h-[48px] items-center justify-center gap-2 rounded-[10px] bg-[var(--color-danger)] text-[16px] font-bold text-white shadow-[0_8px_18px_rgba(245,34,45,0.22)] disabled:opacity-60"
             >
-              <Image src="/icons/trash.svg" alt="" width={20} height={20} />
+              <TrashMaskIcon className="size-5" />
               {isDeleting ? "กำลังลบ..." : "ลบทั้งหมด"}
             </button>
           </div>
@@ -389,20 +490,153 @@ const DeleteAllTeamsConfirmModal = ({
 const TeamListModal = ({
   teams,
   openMenuTeamId,
+  isSavingOrder,
   onClose,
   onToggleMenu,
   onEdit,
   onDelete,
   onDeleteAll,
+  onReorder,
 }: {
   teams: TeamListItem[];
   openMenuTeamId: string | null;
+  isSavingOrder: boolean;
   onClose: () => void;
   onToggleMenu: (teamId: string) => void;
   onEdit: (team: TeamSummary) => void;
   onDelete: (team: TeamSummary) => void;
   onDeleteAll: () => void;
+  onReorder: (teamIds: string[]) => void;
 }) => {
+  const [orderedTeams, setOrderedTeams] = useState<TeamListItem[]>(teams);
+  const [draggingTeamId, setDraggingTeamId] = useState<string | null>(null);
+  const orderedTeamsRef = useRef<TeamListItem[]>(teams);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draggingTeamIdRef = useRef<string | null>(null);
+
+  const clearLongPressTimer = () => {
+    if (!longPressTimerRef.current) {
+      return;
+    }
+
+    clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = null;
+  };
+
+  const setActiveDragTeam = (teamId: string | null) => {
+    draggingTeamIdRef.current = teamId;
+    setDraggingTeamId(teamId);
+  };
+
+  const commitReorder = () => {
+    const nextWaitingTeamIds = orderedTeamsRef.current
+      .filter((team) => {
+        return team.status === "waiting";
+      })
+      .map((team) => {
+        return team.team.id;
+      });
+    const currentWaitingTeamIds = teams
+      .filter((team) => {
+        return team.status === "waiting";
+      })
+      .map((team) => {
+        return team.team.id;
+      });
+
+    if (nextWaitingTeamIds.join("|") === currentWaitingTeamIds.join("|")) {
+      return;
+    }
+
+    onReorder(nextWaitingTeamIds);
+  };
+
+  const handlePointerDown = (
+    event: PointerEvent<HTMLDivElement>,
+    team: TeamListItem
+  ) => {
+    const target = event.target as HTMLElement;
+
+    if (team.status !== "waiting" || isSavingOrder || target.closest("button")) {
+      return;
+    }
+
+    clearLongPressTimer();
+
+    const currentTarget = event.currentTarget;
+    const pointerId = event.pointerId;
+
+    longPressTimerRef.current = setTimeout(() => {
+      setActiveDragTeam(team.id);
+
+      try {
+        currentTarget.setPointerCapture(pointerId);
+      } catch {
+        // Pointer capture can fail when the pointer ended before long press.
+      }
+    }, 220);
+  };
+
+  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const activeTeamId = draggingTeamIdRef.current;
+
+    if (!activeTeamId) {
+      return;
+    }
+
+    const targetElement = document.elementFromPoint(
+      event.clientX,
+      event.clientY
+    );
+    const targetRow = targetElement?.closest("[data-team-list-id]");
+    const targetTeamId = targetRow?.getAttribute("data-team-list-id");
+
+    if (!targetTeamId || targetTeamId === activeTeamId) {
+      return;
+    }
+
+    const targetTeam = orderedTeamsRef.current.find((team) => {
+      return team.id === targetTeamId;
+    });
+
+    if (!targetTeam || targetTeam.status !== "waiting") {
+      return;
+    }
+
+    event.preventDefault();
+
+    setOrderedTeams((currentTeams) => {
+      const fromIndex = currentTeams.findIndex((team) => {
+        return team.id === activeTeamId;
+      });
+      const toIndex = currentTeams.findIndex((team) => {
+        return team.id === targetTeamId;
+      });
+
+      if (fromIndex < 0 || toIndex < 0) {
+        return currentTeams;
+      }
+
+      const nextTeams = currentTeams.slice();
+      const [movingTeam] = nextTeams.splice(fromIndex, 1);
+      nextTeams.splice(toIndex, 0, movingTeam);
+      orderedTeamsRef.current = nextTeams;
+
+      return nextTeams;
+    });
+  };
+
+  const handlePointerEnd = () => {
+    clearLongPressTimer();
+
+    if (!draggingTeamIdRef.current) {
+      return;
+    }
+
+    commitReorder();
+    setActiveDragTeam(null);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4 py-8">
       <div className="relative flex max-h-[82dvh] w-full max-w-[408px] flex-col rounded-[18px] bg-white shadow-[0_18px_44px_rgba(0,0,0,0.18)]">
@@ -411,7 +645,7 @@ const TeamListModal = ({
             <h2 className="text-[20px] font-bold leading-none text-[#222222]">
               รายชื่อทีมทั้งหมด
             </h2>
-            <p className="mt-2 text-[13px] text-[#9A9A9A]">
+            <p className="mt-2 text-[13px] text-[var(--color-text-muted)]">
               ทั้งหมด {teams.length} ทีม
             </p>
           </div>
@@ -424,41 +658,56 @@ const TeamListModal = ({
             <Image src="/icons/close-small.svg" alt="" width={10} height={10} />
           </button>
         </div>
-        <div className="space-y-3 overflow-y-auto px-5 py-4">
-          {teams.map((team) => {
+        <div
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerEnd}
+          onPointerCancel={handlePointerEnd}
+          className="space-y-3 overflow-y-auto px-5 py-4"
+        >
+          {orderedTeams.map((team, index) => {
             const isPlaying = team.status === "playing";
             const isActionOpen = openMenuTeamId === team.id;
+            const isDragging = draggingTeamId === team.id;
 
             return (
               <div
                 key={team.id}
+                data-team-list-id={team.id}
+                onPointerDown={(event) => {
+                  handlePointerDown(event, team);
+                }}
+                style={{
+                  touchAction: isDragging ? "none" : "pan-y",
+                }}
                 className={
                   isPlaying
-                    ? "rounded-[12px] bg-[#E5F8FF] px-4 py-3"
-                    : "rounded-[12px] bg-[#F6FFE6] px-4 py-3"
+                    ? "rounded-[12px] bg-[#E5F8FF] px-4 py-3 transition"
+                    : isDragging
+                      ? "cursor-grabbing rounded-[12px] bg-[#F6FFE6] px-4 py-3 shadow-[0_10px_24px_rgba(29,137,228,0.18)] ring-2 ring-[var(--color-primary)] transition"
+                      : "cursor-grab rounded-[12px] bg-[#F6FFE6] px-4 py-3 transition active:scale-[0.99]"
                 }
               >
                 <div className="flex min-h-[44px] items-center">
-                  <span className="w-[28px] text-[16px] font-bold text-[#9A9A9A]">
-                    {team.order}
+                  <span className="w-[28px] text-[16px] font-bold text-[var(--color-text-muted)]">
+                    {index + 1}
                   </span>
-                  <TeamLogoPlaceholder />
+                  <TeamLogoPlaceholder teamProfile={team.team.teamProfile} />
                   <div className="ml-3 min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <p className="text-[12px] leading-none text-[#9A9A9A]">
+                      <p className="text-[12px] leading-none text-[var(--color-text-muted)]">
                         {team.label}
                       </p>
                       <span
                         className={
                           isPlaying
-                            ? "rounded-full bg-[#D7F0FF] px-2 py-[3px] text-[11px] font-semibold leading-none text-[#1D89E4]"
+                            ? "rounded-full bg-[var(--color-primary-soft)] px-2 py-[3px] text-[11px] font-semibold leading-none text-[var(--color-primary)]"
                             : "rounded-full bg-white/70 px-2 py-[3px] text-[11px] font-semibold leading-none text-[#7B9A3C]"
                         }
                       >
                         {isPlaying ? "กำลังเล่น" : "รอคิว"}
                       </span>
                     </div>
-                    <p className="mt-[7px] truncate text-[15px] font-bold leading-none text-[#333333]">
+                    <p className="mt-[7px] truncate text-[15px] font-bold leading-none text-[var(--color-text)]">
                       {team.players.map((player) => player.name).join(" - ")}
                     </p>
                   </div>
@@ -485,26 +734,19 @@ const TeamListModal = ({
                       onClick={() => {
                         onEdit(team.team);
                       }}
-                      className="flex h-[40px] items-center justify-center gap-2 rounded-[9px] bg-white text-[14px] font-semibold text-[#333333] shadow-[0_6px_14px_rgba(0,0,0,0.06)]"
+                      className="flex h-[40px] items-center justify-center gap-2 rounded-[9px] bg-white text-[14px] font-semibold text-[var(--color-text)] shadow-[0_6px_14px_rgba(0,0,0,0.06)]"
                     >
                       <Image src="/icons/document.svg" alt="" width={20} height={20} />
                       แก้ไขชื่อ
                     </button>
                     <button
                       type="button"
-                      disabled={isPlaying}
                       onClick={() => {
                         onDelete(team.team);
                       }}
-                      className="flex h-[40px] items-center justify-center gap-2 rounded-[9px] bg-white text-[14px] font-semibold text-[#FF2A3D] shadow-[0_6px_14px_rgba(0,0,0,0.06)] disabled:text-[#BBBBBB]"
+                      className="flex h-[40px] items-center justify-center gap-2 rounded-[9px] bg-white text-[14px] font-semibold text-[var(--color-danger)] shadow-[0_6px_14px_rgba(0,0,0,0.06)]"
                     >
-                      <Image
-                        src="/icons/trash.svg"
-                        alt=""
-                        width={20}
-                        height={20}
-                        className={isPlaying ? "opacity-35 grayscale" : ""}
-                      />
+                      <TrashMaskIcon className="size-5" />
                       ลบทีม
                     </button>
                   </div>
@@ -518,14 +760,10 @@ const TeamListModal = ({
             type="button"
             disabled={teams.length === 0}
             onClick={onDeleteAll}
-            className="flex h-[48px] w-full items-center justify-center gap-2 rounded-[10px] border border-[#FF2A3D] bg-white text-[16px] font-bold text-[#FF2A3D] disabled:border-[#E5E5E5] disabled:text-[#BBBBBB]"
+            className="flex h-[48px] w-full items-center justify-center gap-2 rounded-[10px] border border-[var(--color-danger)] bg-white text-[16px] font-bold text-[var(--color-danger)] disabled:border-[#E5E5E5] disabled:text-[#BBBBBB]"
           >
-            <Image
-              src="/icons/trash.svg"
-              alt=""
-              width={20}
-              height={20}
-              className={teams.length === 0 ? "opacity-35 grayscale" : ""}
+            <TrashMaskIcon
+              className={teams.length === 0 ? "size-5 opacity-35" : "size-5"}
             />
             ลบทีมทั้งหมด
           </button>
@@ -560,15 +798,15 @@ const QueueTeamRow = ({
           : "relative flex h-[64px] items-center rounded-[10px] bg-[#F6FFE6] px-5"
       }
     >
-      <span className="w-[24px] text-[16px] font-bold text-[#9A9A9A]">
+      <span className="w-[24px] text-[16px] font-bold text-[var(--color-text-muted)]">
         {index + 3}
       </span>
-      <TeamLogoPlaceholder />
+      <TeamLogoPlaceholder teamProfile={team.teamProfile} />
       <div className="ml-3 min-w-0 flex-1">
-        <p className="text-[12px] font-normal leading-none text-[#9A9A9A]">
+        <p className="text-[12px] font-normal leading-none text-[var(--color-text-muted)]">
           ทีม :
         </p>
-        <p className="mt-[5px] truncate text-[15px] font-bold leading-none text-[#333333]">
+        <p className="mt-[5px] truncate text-[15px] font-bold leading-none text-[var(--color-text)]">
           {team.players.map((player) => player.name).join(" - ")}
         </p>
       </div>
@@ -590,7 +828,7 @@ const QueueTeamRow = ({
           <button
             type="button"
             onClick={onEdit}
-            className="flex h-[44px] w-full items-center gap-3 px-4 text-left text-[14px] font-medium text-[#333333]"
+            className="flex h-[44px] w-full items-center gap-3 px-4 text-left text-[14px] font-medium text-[var(--color-text)]"
           >
             <Image src="/icons/document.svg" alt="" width={20} height={20} />
             แก้ไขชื่อ
@@ -598,9 +836,9 @@ const QueueTeamRow = ({
           <button
             type="button"
             onClick={onDelete}
-            className="flex h-[44px] w-full items-center gap-3 px-4 text-left text-[14px] font-medium text-[#FF2A3D]"
+            className="flex h-[44px] w-full items-center gap-3 px-4 text-left text-[14px] font-medium text-[var(--color-danger)]"
           >
-            <Image src="/icons/trash.svg" alt="" width={20} height={20} />
+            <TrashMaskIcon className="size-5" />
             ลบทีม
           </button>
         </div>
@@ -680,7 +918,7 @@ const CourtPlayersPanel = ({
     setIsSavingTeam(true);
 
     const supabase = createBrowserSupabaseClient();
-    const { error } = await supabase.rpc("delete_waiting_team", {
+    const { error } = await supabase.rpc("delete_court_team", {
       p_player_one_id: deletingTeam.team.players[0].id,
       p_player_two_id: deletingTeam.team.players[1].id,
     });
@@ -749,8 +987,32 @@ const CourtPlayersPanel = ({
     router.refresh();
   };
 
+  const handleReorderTeams = async (teamIds: string[]) => {
+    if (!courtId || teamIds.length === 0) {
+      return;
+    }
+
+    setIsSavingTeam(true);
+    setTeamActionError(null);
+
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase.rpc("reorder_court_waiting_teams", {
+      p_court_id: courtId,
+      p_team_ids: teamIds,
+    });
+
+    setIsSavingTeam(false);
+
+    if (error) {
+      setTeamActionError(error.message);
+      return;
+    }
+
+    router.refresh();
+  };
+
   return (
-    <section className="-mt-[68px]">
+    <section className="-mt-[68px] pb-[86px]">
       <CurrentMatchCard
         teams={currentTeams}
         isRecordingWin={isRecordingWin}
@@ -758,11 +1020,11 @@ const CourtPlayersPanel = ({
       />
       <div className="px-4 pt-[28px]">
         <div className="flex items-center justify-between">
-          <h2 className="text-[16px] font-normal text-[#9A9A9A]">ลำดับทีม</h2>
+          <h2 className="text-[16px] font-normal text-[var(--color-text-muted)]">ลำดับทีม</h2>
           <button
             type="button"
             onClick={onAddTeams}
-            className="flex items-center gap-[6px] text-[16px] font-medium leading-none text-[#1D89E4]"
+            className="flex items-center gap-[6px] text-[16px] font-medium leading-none text-[var(--color-primary)]"
           >
             <Image src="/icons/add.svg" alt="" width={16} height={16} />
             เพิ่มทีม
@@ -796,16 +1058,18 @@ const CourtPlayersPanel = ({
             {teamActionError}
           </p>
         ) : null}
-        <button
-          type="button"
-          onClick={() => {
-            setOpenMenuTeamId(null);
-            setIsTeamListOpen(true);
-          }}
-          className="mt-[18px] h-[48px] w-full rounded-[9px] border border-[#1D89E4] text-[16px] font-bold text-[#1D89E4]"
-        >
-          จัดการ
-        </button>
+        <div className="fixed bottom-4 left-1/2 z-30 w-full max-w-[440px] -translate-x-1/2 px-4">
+          <button
+            type="button"
+            onClick={() => {
+              setOpenMenuTeamId(null);
+              setIsTeamListOpen(true);
+            }}
+            className="h-[48px] w-full rounded-[9px] border border-[var(--color-primary)] bg-white text-[16px] font-bold text-[var(--color-primary)] shadow-[0_8px_18px_rgba(29,137,228,0.10)]"
+          >
+            จัดการ
+          </button>
+        </div>
       </div>
       {editingTeam ? (
         <TeamEditModal
@@ -861,8 +1125,10 @@ const CourtPlayersPanel = ({
       ) : null}
       {isTeamListOpen ? (
         <TeamListModal
+          key={allTeams.map((team) => team.id).join("|")}
           teams={allTeams}
           openMenuTeamId={openMenuTeamId}
+          isSavingOrder={isSavingTeam}
           onClose={() => {
             setOpenMenuTeamId(null);
             setIsTeamListOpen(false);
@@ -885,6 +1151,9 @@ const CourtPlayersPanel = ({
             setIsTeamListOpen(false);
             setTeamActionError(null);
             setIsDeleteAllOpen(true);
+          }}
+          onReorder={(teamIds) => {
+            void handleReorderTeams(teamIds);
           }}
         />
       ) : null}

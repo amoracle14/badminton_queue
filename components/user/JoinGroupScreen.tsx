@@ -9,7 +9,7 @@ const JoinGroupScreen = ({ groupCode }: JoinGroupScreenProps) => {
   return (
     <UserAppShell>
       <section className="flex min-h-[calc(100dvh-48px)] flex-col justify-center">
-        <p className="text-[14px] font-medium text-[#1D89E4]">User</p>
+        <p className="text-[14px] font-medium text-[var(--color-primary)]">User</p>
         <h1 className="mt-2 text-[28px] font-bold leading-tight text-[#222222]">
           เข้าร่วมก๊วน
         </h1>
@@ -19,7 +19,7 @@ const JoinGroupScreen = ({ groupCode }: JoinGroupScreenProps) => {
 
         <Link
           href={`/queue/${groupCode}`}
-          className="mt-8 flex h-[48px] items-center justify-center rounded-[9px] bg-[#2EA8FF] text-[16px] font-bold text-white"
+          className="mt-8 flex h-[48px] items-center justify-center rounded-[9px] bg-[var(--color-primary)] text-[16px] font-bold text-white"
         >
           ดูคิวของฉัน
         </Link>

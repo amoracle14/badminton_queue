@@ -14,7 +14,7 @@ const EmptyPlayersState = ({ onAddPlayers }: EmptyPlayersStateProps) => {
       <button
         type="button"
         onClick={onAddPlayers}
-        className="mt-[26px] grid h-[43px] w-[200px] place-items-center rounded-[9px] bg-[#2EA8FF] text-[16px] font-bold text-white shadow-[0_8px_18px_rgba(46,168,255,0.18)]"
+        className="mt-[26px] grid h-[43px] w-[200px] place-items-center rounded-[9px] bg-[var(--color-primary)] text-[16px] font-bold text-white shadow-[0_8px_18px_rgba(29,137,228,0.18)]"
       >
         ไปเพิ่มผู้เล่น
       </button>

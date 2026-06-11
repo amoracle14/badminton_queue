@@ -5,18 +5,30 @@ export type CourtSummary = {
   name: string;
   status: string;
   playerCount: number;
+  teams: CourtOverviewTeamSummary[];
 };
 
 export type PlayerSummary = {
   id: string;
   name: string;
   status: string;
+  teamId?: string | null;
+  teamSlot?: number | null;
+  queueOrder?: number | null;
+  teamProfile?: string | null;
 };
 
 export type CourtTeamSummary = {
   team: "A" | "B";
   wins: number;
+  teamProfile?: string | null;
   players: PlayerSummary[];
+};
+
+export type CourtOverviewTeamSummary = {
+  team: "A" | "B";
+  label: string;
+  teamProfile?: string | null;
 };
 
 export type CurrentMatchSummary = {
@@ -58,17 +70,24 @@ type MatchPlayerWithPlayerRow = {
         id: string;
         name: string;
         status: string;
+        team_id?: string | null;
+        team_slot?: number | null;
+        team_profile?: string | null;
       }
     | {
         id: string;
         name: string;
         status: string;
+        team_id?: string | null;
+        team_slot?: number | null;
+        team_profile?: string | null;
       }[]
     | null;
 };
 
 type MatchWithPlayersRow = {
   id: string;
+  court_id?: string | null;
   team_a_wins: number | null;
   team_b_wins: number | null;
   match_players: MatchPlayerWithPlayerRow[] | null;
@@ -77,6 +96,16 @@ type MatchWithPlayersRow = {
 type PlayerCourtRow = {
   court_id: string | null;
   status: string;
+};
+
+type QueuedPlayerRow = {
+  id: string;
+  name: string;
+  status: string;
+  team_id: string | null;
+  team_slot: number | null;
+  queue_order: number | null;
+  team_profile: string | null;
 };
 
 type GroupRow = {
@@ -95,6 +124,7 @@ const fallbackOverviewData: CourtsOverviewData = {
       name: "สนามที่ 1",
       status: "ว่าง",
       playerCount: 0,
+      teams: [],
     },
   ],
   isConnected: false,
@@ -173,96 +203,23 @@ const getLatestGroupId = async () => {
   return data.id;
 };
 
-const getActivePlayersByCourt = async (courtId: string) => {
-  const supabase = createServerSupabaseClient();
-
-  if (!supabase) {
-    return [];
-  }
-
-  const { data: match, error: matchError } = await supabase
-    .from("matches")
-    .select("id")
-    .eq("court_id", courtId)
-    .in("status", ["active", "paused"])
-    .order("started_at", { ascending: false })
-    .limit(1)
-    .maybeSingle<{ id: string }>();
-
-  if (matchError || !match) {
-    return [];
-  }
-
-  const { data, error } = await supabase
-    .from("match_players")
-    .select("id,team,slot,players(id,name,status)")
-    .eq("match_id", match.id)
-    .order("team", { ascending: true })
-    .order("slot", { ascending: true });
-
-  if (error || !data) {
-    return [];
-  }
-
-  return (data as MatchPlayerWithPlayerRow[])
-    .map((matchPlayer) => {
-      const player = Array.isArray(matchPlayer.players)
-        ? matchPlayer.players[0]
-        : matchPlayer.players;
-
-      if (!player) {
-        return null;
-      }
-
-      return {
-        id: player.id,
-        name: player.name,
-        status: player.status,
-      };
-    })
-    .filter((player): player is PlayerSummary => {
-      return Boolean(player);
-    });
-};
-
-const getCurrentMatchByCourt = async (
-  courtId: string
-): Promise<CurrentMatchSummary | null> => {
-  const supabase = createServerSupabaseClient();
-
-  if (!supabase) {
-    return null;
-  }
-
-  const { data, error } = await supabase
-    .from("matches")
-    .select(
-      "id,team_a_wins,team_b_wins,match_players(id,team,slot,players(id,name,status))"
-    )
-    .eq("court_id", courtId)
-    .in("status", ["active", "paused"])
-    .order("started_at", { ascending: false })
-    .limit(1)
-    .maybeSingle<MatchWithPlayersRow>();
-
-  if (error || !data) {
-    return null;
-  }
-
+const getTeamsFromMatch = (match: MatchWithPlayersRow) => {
   const teams: CourtTeamSummary[] = [
     {
       team: "A",
-      wins: data.team_a_wins ?? 0,
+      wins: match.team_a_wins ?? 0,
+      teamProfile: null,
       players: [],
     },
     {
       team: "B",
-      wins: data.team_b_wins ?? 0,
+      wins: match.team_b_wins ?? 0,
+      teamProfile: null,
       players: [],
     },
   ];
 
-  (data.match_players ?? [])
+  (match.match_players ?? [])
     .slice()
     .sort((firstPlayer, secondPlayer) => {
       if (firstPlayer.team === secondPlayer.team) {
@@ -284,16 +241,50 @@ const getCurrentMatchByCourt = async (
         return currentTeam.team === matchPlayer.team;
       });
 
+      if (team && !team.teamProfile) {
+        team.teamProfile = player.team_profile;
+      }
+
       team?.players.push({
         id: player.id,
         name: player.name,
         status: player.status,
+        teamId: player.team_id,
+        teamSlot: player.team_slot,
+        teamProfile: player.team_profile,
       });
     });
 
+  return teams;
+};
+
+const getCurrentMatchByCourt = async (
+  courtId: string
+): Promise<CurrentMatchSummary | null> => {
+  const supabase = createServerSupabaseClient();
+
+  if (!supabase) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("matches")
+    .select(
+      "id,team_a_wins,team_b_wins,match_players(id,team,slot,players(id,name,status,team_id,team_slot,team_profile))"
+    )
+    .eq("court_id", courtId)
+    .in("status", ["active", "paused"])
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<MatchWithPlayersRow>();
+
+  if (error || !data) {
+    return null;
+  }
+
   return {
     id: data.id,
-    teams,
+    teams: getTeamsFromMatch(data),
   };
 };
 
@@ -326,7 +317,7 @@ const getQueuedPlayersByCourt = async (courtId: string) => {
 
   const { data, error } = await supabase
     .from("players")
-    .select("id,name,status")
+    .select("id,name,status,team_id,team_slot,queue_order,team_profile")
     .eq("court_id", courtId)
     .eq("status", "waiting")
     .order("queue_order", { ascending: true, nullsFirst: false })
@@ -336,7 +327,66 @@ const getQueuedPlayersByCourt = async (courtId: string) => {
     return [];
   }
 
-  return data as PlayerSummary[];
+  return (data as QueuedPlayerRow[]).map((player) => {
+    return {
+      id: player.id,
+      name: player.name,
+      status: player.status,
+      teamId: player.team_id,
+      teamSlot: player.team_slot,
+      queueOrder: player.queue_order,
+      teamProfile: player.team_profile,
+    };
+  });
+};
+
+const getActiveTeamsByCourt = async (courtIds: string[]) => {
+  const supabase = createServerSupabaseClient();
+  const teamsByCourt = new Map<string, CourtOverviewTeamSummary[]>();
+
+  courtIds.forEach((courtId) => {
+    teamsByCourt.set(courtId, []);
+  });
+
+  if (!supabase || courtIds.length === 0) {
+    return teamsByCourt;
+  }
+
+  const { data, error } = await supabase
+    .from("matches")
+    .select(
+      "id,court_id,team_a_wins,team_b_wins,match_players(id,team,slot,players(id,name,status,team_id,team_slot,team_profile))"
+    )
+    .in("court_id", courtIds)
+    .in("status", ["active", "paused"])
+    .order("started_at", { ascending: false });
+
+  if (error || !data) {
+    return teamsByCourt;
+  }
+
+  (data as MatchWithPlayersRow[]).forEach((match) => {
+    if (!match.court_id || (teamsByCourt.get(match.court_id)?.length ?? 0) > 0) {
+      return;
+    }
+
+    const teams = getTeamsFromMatch(match).map((team) => {
+      return {
+        team: team.team,
+        label:
+          team.players
+            .map((player) => {
+              return player.name;
+            })
+            .join(" - ") || (team.team === "A" ? "TEAM A" : "TEAM B"),
+        teamProfile: team.teamProfile,
+      };
+    });
+
+    teamsByCourt.set(match.court_id, teams);
+  });
+
+  return teamsByCourt;
 };
 
 export const getCourtsOverviewData = async (): Promise<CourtsOverviewData> => {
@@ -360,11 +410,13 @@ export const getCourtsOverviewData = async (): Promise<CourtsOverviewData> => {
   const sortedCourts = (data.courts ?? []).sort((firstCourt, secondCourt) => {
     return firstCourt.court_number - secondCourt.court_number;
   });
-  const playerCountsByCourt = await getPlayerCountsByCourt(
-    sortedCourts.map((court) => {
-      return court.id;
-    })
-  );
+  const courtIds = sortedCourts.map((court) => {
+    return court.id;
+  });
+  const [playerCountsByCourt, activeTeamsByCourt] = await Promise.all([
+    getPlayerCountsByCourt(courtIds),
+    getActiveTeamsByCourt(courtIds),
+  ]);
   const courts = sortedCourts
     .map((court) => {
       return {
@@ -372,6 +424,7 @@ export const getCourtsOverviewData = async (): Promise<CourtsOverviewData> => {
         name: buildCourtName(court.court_number),
         status: normalizeCourtStatus(court.status),
         playerCount: playerCountsByCourt.get(court.id) ?? 0,
+        teams: activeTeamsByCourt.get(court.id) ?? [],
       };
     });
 
@@ -449,13 +502,15 @@ export const getCourtDetailData = async (
     };
   }
 
-  const courtPlayerCount = await getCourtPlayerCount(court.id);
-  const currentMatch = await getCurrentMatchByCourt(court.id);
+  const [courtPlayerCount, currentMatch, queuedPlayers] = await Promise.all([
+    getCourtPlayerCount(court.id),
+    getCurrentMatchByCourt(court.id),
+    getQueuedPlayersByCourt(court.id),
+  ]);
   const activeCourtPlayers =
     currentMatch?.teams.flatMap((team) => {
       return team.players;
-    }) ?? (await getActivePlayersByCourt(court.id));
-  const queuedPlayers = await getQueuedPlayersByCourt(court.id);
+    }) ?? [];
 
   return {
     courtId: court.id,

@@ -1,14 +1,78 @@
+"use client";
+
 import Image from "next/image";
+import { useCallback, useEffect, useRef, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import MobileAppShell from "@/components/admin/layout/MobileAppShell";
 import TopCourtBar from "@/components/admin/layout/TopCourtBar";
 import CourtCard from "@/components/admin/courts/CourtCard";
 import type { CourtsOverviewData } from "@/lib/admin/courts";
+import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 
 type CourtsOverviewScreenProps = {
   data: CourtsOverviewData;
 };
 
 const CourtsOverviewScreen = ({ data }: CourtsOverviewScreenProps) => {
+  const router = useRouter();
+  const [, startTransition] = useTransition();
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const scheduleRefresh = useCallback(() => {
+    if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current);
+    }
+
+    refreshTimerRef.current = setTimeout(() => {
+      startTransition(() => {
+        router.refresh();
+      });
+    }, 120);
+  }, [router]);
+
+  useEffect(() => {
+    if (!data.groupId) {
+      return;
+    }
+
+    const supabase = createBrowserSupabaseClient();
+    const channel = supabase
+      .channel(`courts-overview:${data.groupId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "players",
+          filter: `group_id=eq.${data.groupId}`,
+        },
+        () => {
+          scheduleRefresh();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "courts",
+          filter: `group_id=eq.${data.groupId}`,
+        },
+        () => {
+          scheduleRefresh();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+      }
+
+      void supabase.removeChannel(channel);
+    };
+  }, [data.groupId, scheduleRefresh]);
+
   return (
     <MobileAppShell>
       <TopCourtBar label={data.groupLabel} />
@@ -18,7 +82,7 @@ const CourtsOverviewScreen = ({ data }: CourtsOverviewScreenProps) => {
           <h1 className="text-[16px] font-normal text-[#303030]">สนาม</h1>
           <button
             type="button"
-            className="flex items-center gap-[6px] text-[16px] font-medium leading-none text-[#1D89E4]"
+            className="flex items-center gap-[6px] text-[16px] font-medium leading-none text-[var(--color-primary)]"
           >
             <Image
               src="/icons/add.svg"
@@ -40,6 +104,7 @@ const CourtsOverviewScreen = ({ data }: CourtsOverviewScreenProps) => {
                 name={court.name}
                 status={court.status}
                 playerCount={court.playerCount}
+                teams={court.teams}
               />
             );
           })}
