@@ -1,5 +1,7 @@
+import { redirect } from "next/navigation";
 import CourtDetailScreen from "@/components/admin/courts/CourtDetailScreen";
 import { getCourtDetailData } from "@/lib/admin/courts";
+import { getCurrentAdminName } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +12,12 @@ type CourtPageProps = {
 };
 
 const CourtPage = async ({ params }: CourtPageProps) => {
+  const adminName = await getCurrentAdminName();
+
+  if (!adminName) {
+    redirect("/");
+  }
+
   const { courtId } = await params;
   const courtData = await getCourtDetailData(courtId);
 

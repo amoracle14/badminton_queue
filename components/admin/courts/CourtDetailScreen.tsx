@@ -124,7 +124,13 @@ const CourtDetailScreen = ({ data }: CourtDetailScreenProps) => {
             : ""
         }
       >
-        <TopCourtBar label={data.courtName} showBack detailMode />
+        <TopCourtBar
+          label={data.courtName}
+          showBack
+          detailMode
+          courtOptions={data.courtOptions}
+          includeAllOption
+        />
       </div>
 
       {hasPlayers ? (
