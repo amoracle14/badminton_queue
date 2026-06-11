@@ -514,7 +514,6 @@ const TeamListModal = ({
   const listRef = useRef<HTMLDivElement | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draggingTeamIdRef = useRef<string | null>(null);
-  const suppressClickTeamIdRef = useRef<string | null>(null);
 
   const clearLongPressTimer = () => {
     if (!longPressTimerRef.current) {
@@ -553,16 +552,17 @@ const TeamListModal = ({
     onReorder(nextWaitingTeamIds);
   };
 
-  const handleDragHandlePointerDown = (
-    event: PointerEvent<HTMLButtonElement>,
+  const handleTeamPointerDown = (
+    event: PointerEvent<HTMLDivElement>,
     team: TeamListItem
   ) => {
-    if (team.status !== "waiting" || isSavingOrder) {
+    const target = event.target as HTMLElement;
+
+    if (team.status !== "waiting" || isSavingOrder || target.closest("button")) {
       return;
     }
 
     clearLongPressTimer();
-    suppressClickTeamIdRef.current = null;
 
     const currentTarget = event.currentTarget;
     const pointerId = event.pointerId;
@@ -659,7 +659,6 @@ const TeamListModal = ({
       return;
     }
 
-    suppressClickTeamIdRef.current = draggingTeamIdRef.current;
     commitReorder();
     setActiveDragTeam(null);
   };
@@ -702,15 +701,18 @@ const TeamListModal = ({
                 key={team.id}
                 data-team-list-id={team.id}
                 data-team-list-status={team.status}
+                onPointerDown={(event) => {
+                  handleTeamPointerDown(event, team);
+                }}
                 style={{
-                  touchAction: "pan-y",
+                  touchAction: isDragging ? "none" : "pan-y",
                 }}
                 className={
                   isPlaying
                     ? "rounded-[12px] bg-[#E5F8FF] px-4 py-3 transition"
                     : isDragging
                       ? "rounded-[12px] bg-[#F6FFE6] px-4 py-3 shadow-[0_12px_28px_rgba(29,137,228,0.22)] ring-2 ring-[var(--color-primary)] transition-all duration-150"
-                      : "rounded-[12px] bg-[#F6FFE6] px-4 py-3 transition-all duration-150"
+                      : "cursor-grab rounded-[12px] bg-[#F6FFE6] px-4 py-3 transition-all duration-150 active:scale-[0.99]"
                 }
               >
                 <div className="flex min-h-[44px] items-center">
@@ -740,22 +742,10 @@ const TeamListModal = ({
                   <button
                     type="button"
                     aria-label="จัดการทีม"
-                    onPointerDown={(event) => {
-                      handleDragHandlePointerDown(event, team);
-                    }}
                     onClick={() => {
-                      if (suppressClickTeamIdRef.current === team.id) {
-                        suppressClickTeamIdRef.current = null;
-                        return;
-                      }
-
                       onToggleMenu(team.id);
                     }}
-                    className={
-                      team.status === "waiting"
-                        ? "ml-2 grid size-10 touch-none cursor-grab place-items-center rounded-full active:cursor-grabbing active:bg-white/70"
-                        : "ml-2 grid size-10 place-items-center rounded-full"
-                    }
+                    className="ml-2 grid size-10 place-items-center rounded-full"
                   >
                     <Image
                       src="/icons/more-vertical-blue.svg"
