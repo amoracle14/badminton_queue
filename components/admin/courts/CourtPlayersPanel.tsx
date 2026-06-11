@@ -194,6 +194,25 @@ const TrashMaskIcon = ({ className }: { className: string }) => {
   );
 };
 
+const DragHandleMaskIcon = ({ className }: { className: string }) => {
+  return (
+    <span
+      aria-hidden="true"
+      className={`bg-current ${className}`}
+      style={{
+        WebkitMaskImage: "url('/icons/drag-handle.svg')",
+        maskImage: "url('/icons/drag-handle.svg')",
+        WebkitMaskRepeat: "no-repeat",
+        maskRepeat: "no-repeat",
+        WebkitMaskSize: "contain",
+        maskSize: "contain",
+        WebkitMaskPosition: "center",
+        maskPosition: "center",
+      }}
+    />
+  );
+};
+
 const WinBadge = ({
   wins,
   team,
@@ -552,13 +571,11 @@ const TeamListModal = ({
     onReorder(nextWaitingTeamIds);
   };
 
-  const handleTeamPointerDown = (
-    event: PointerEvent<HTMLDivElement>,
+  const handleDragHandlePointerDown = (
+    event: PointerEvent<HTMLButtonElement>,
     team: TeamListItem
   ) => {
-    const target = event.target as HTMLElement;
-
-    if (team.status !== "waiting" || isSavingOrder || target.closest("button")) {
+    if (team.status !== "waiting" || isSavingOrder) {
       return;
     }
 
@@ -701,18 +718,15 @@ const TeamListModal = ({
                 key={team.id}
                 data-team-list-id={team.id}
                 data-team-list-status={team.status}
-                onPointerDown={(event) => {
-                  handleTeamPointerDown(event, team);
-                }}
                 style={{
-                  touchAction: isDragging ? "none" : "pan-y",
+                  touchAction: "pan-y",
                 }}
                 className={
                   isPlaying
                     ? "rounded-[12px] bg-[#E5F8FF] px-4 py-3 transition"
                     : isDragging
                       ? "rounded-[12px] bg-[#F6FFE6] px-4 py-3 shadow-[0_12px_28px_rgba(29,137,228,0.22)] ring-2 ring-[var(--color-primary)] transition-all duration-150"
-                      : "cursor-grab rounded-[12px] bg-[#F6FFE6] px-4 py-3 transition-all duration-150 active:scale-[0.99]"
+                      : "rounded-[12px] bg-[#F6FFE6] px-4 py-3 transition-all duration-150"
                 }
               >
                 <div className="flex min-h-[44px] items-center">
@@ -745,7 +759,7 @@ const TeamListModal = ({
                     onClick={() => {
                       onToggleMenu(team.id);
                     }}
-                    className="ml-2 grid size-10 place-items-center rounded-full"
+                    className="ml-2 grid size-9 place-items-center rounded-full"
                   >
                     <Image
                       src="/icons/more-vertical-blue.svg"
@@ -754,6 +768,18 @@ const TeamListModal = ({
                       height={24}
                     />
                   </button>
+                  {team.status === "waiting" ? (
+                    <button
+                      type="button"
+                      aria-label="ลากเพื่อสลับคิว"
+                      onPointerDown={(event) => {
+                        handleDragHandlePointerDown(event, team);
+                      }}
+                      className="grid size-9 touch-none cursor-grab place-items-center rounded-full text-[var(--color-primary)] active:cursor-grabbing active:bg-white/70"
+                    >
+                      <DragHandleMaskIcon className="size-5" />
+                    </button>
+                  ) : null}
                 </div>
                 {isActionOpen ? (
                   <div className="mt-3 grid grid-cols-2 gap-2 border-t border-white/70 pt-3">
