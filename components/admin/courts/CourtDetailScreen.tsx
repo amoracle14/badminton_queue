@@ -122,6 +122,7 @@ const CourtDetailScreen = ({ data }: CourtDetailScreenProps) => {
 
       {hasPlayers ? (
         <CourtPlayersPanel
+          courtId={data.courtId}
           players={data.players}
           queuedPlayers={data.queuedPlayers}
           currentMatch={data.currentMatch}

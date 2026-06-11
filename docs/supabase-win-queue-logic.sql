@@ -511,6 +511,62 @@ $$;
 grant execute on function public.delete_waiting_team(uuid, uuid)
   to anon, authenticated;
 
+create or replace function public.delete_all_court_teams(
+  p_court_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_court public.courts%rowtype;
+begin
+  -- Prototype-friendly guard:
+  -- Anonymous calls are allowed while the app has no login screen yet.
+  -- When auth is ready, replace this block with a strict admin check.
+  if auth.uid() is not null and not exists (
+    select 1
+    from public.profiles
+    where id = auth.uid()
+      and role = 'admin'
+  ) then
+    raise exception 'Only admin can delete court teams';
+  end if;
+
+  select *
+  into v_court
+  from public.courts
+  where id = p_court_id
+  for update;
+
+  if not found then
+    raise exception 'Court not found';
+  end if;
+
+  update public.matches
+  set
+    status = 'finished',
+    ended_at = coalesce(ended_at, now())
+  where court_id = p_court_id
+    and status = 'active';
+
+  delete from public.players
+  where group_id = v_court.group_id
+    and court_id = p_court_id;
+
+  update public.courts
+  set
+    status = 'idle',
+    score_a = 0,
+    score_b = 0
+  where id = p_court_id;
+end;
+$$;
+
+grant execute on function public.delete_all_court_teams(uuid)
+  to anon, authenticated;
+
 do $$
 begin
   begin
