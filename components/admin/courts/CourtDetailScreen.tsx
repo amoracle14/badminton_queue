@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import MobileAppShell from "@/components/admin/layout/MobileAppShell";
 import TopCourtBar from "@/components/admin/layout/TopCourtBar";
@@ -19,7 +19,21 @@ const CourtDetailScreen = ({ data }: CourtDetailScreenProps) => {
   const [isAddTeamsOpen, setIsAddTeamsOpen] = useState(false);
   const [isRecordingWin, setIsRecordingWin] = useState(false);
   const [winErrorMessage, setWinErrorMessage] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasPlayers = data.currentPlayerCount > 0;
+
+  const scheduleRefresh = useCallback(() => {
+    if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current);
+    }
+
+    refreshTimerRef.current = setTimeout(() => {
+      startTransition(() => {
+        router.refresh();
+      });
+    }, 120);
+  }, [router]);
 
   const handleOpenAddTeams = () => {
     setIsAddTeamsOpen(true);
@@ -31,7 +45,7 @@ const CourtDetailScreen = ({ data }: CourtDetailScreenProps) => {
 
   const handleSavedTeams = () => {
     setIsAddTeamsOpen(false);
-    router.refresh();
+    scheduleRefresh();
   };
 
   const handleTeamWin = async (team: "A" | "B") => {
@@ -55,7 +69,7 @@ const CourtDetailScreen = ({ data }: CourtDetailScreenProps) => {
       return;
     }
 
-    router.refresh();
+    scheduleRefresh();
   };
 
   useEffect(() => {
@@ -75,7 +89,7 @@ const CourtDetailScreen = ({ data }: CourtDetailScreenProps) => {
           filter: `group_id=eq.${data.groupId}`,
         },
         () => {
-          router.refresh();
+          scheduleRefresh();
         }
       )
       .on(
@@ -87,33 +101,26 @@ const CourtDetailScreen = ({ data }: CourtDetailScreenProps) => {
           filter: `group_id=eq.${data.groupId}`,
         },
         () => {
-          router.refresh();
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "match_players",
-        },
-        () => {
-          router.refresh();
+          scheduleRefresh();
         }
       )
       .subscribe();
 
     return () => {
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+      }
+
       void supabase.removeChannel(channel);
     };
-  }, [data.groupId, router]);
+  }, [data.groupId, router, scheduleRefresh]);
 
   return (
     <MobileAppShell fullBleed={hasPlayers}>
       <div
         className={
           hasPlayers
-            ? "bg-[linear-gradient(135deg,#1D89E4_0%,#1BCFC2_100%)] pb-[120px] pt-4"
+            ? "bg-[linear-gradient(135deg,var(--color-primary)_0%,var(--color-info)_100%)] pb-[120px] pt-4"
             : ""
         }
       >

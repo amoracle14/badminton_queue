@@ -15,7 +15,7 @@ const IconButton = ({
   children,
 }: IconButtonProps) => {
   const className =
-    "grid size-9 shrink-0 place-items-center rounded-full bg-white text-[#1597F5] shadow-[0_8px_24px_rgba(64,169,255,0.08)]";
+    "grid size-9 shrink-0 place-items-center rounded-full bg-white text-[var(--color-primary)] shadow-[0_8px_24px_rgba(29,137,228,0.08)]";
   const content = icon ? (
     <Image src={icon} alt={alt} width={24} height={24} />
   ) : children ? (
