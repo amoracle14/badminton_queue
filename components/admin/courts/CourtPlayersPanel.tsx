@@ -18,6 +18,7 @@ type TeamSummary = {
 };
 
 type CourtPlayersPanelProps = {
+  courtId: string | null;
   players: PlayerSummary[];
   queuedPlayers: PlayerSummary[];
   currentMatch: CurrentMatchSummary | null;
@@ -320,6 +321,71 @@ const TeamDeleteConfirmModal = ({
   );
 };
 
+const DeleteAllTeamsConfirmModal = ({
+  teamCount,
+  isDeleting,
+  errorMessage,
+  onClose,
+  onConfirm,
+}: {
+  teamCount: number;
+  isDeleting: boolean;
+  errorMessage: string | null;
+  onClose: () => void;
+  onConfirm: () => void;
+}) => {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4">
+      <div className="relative w-full max-w-[408px] overflow-hidden rounded-[16px] bg-white shadow-[0_18px_44px_rgba(0,0,0,0.18)]">
+        <button
+          type="button"
+          aria-label="ปิด"
+          onClick={onClose}
+          className="absolute right-[18px] top-[18px] grid size-7 place-items-center rounded-full bg-[#FAFAFA]"
+        >
+          <Image src="/icons/close-small.svg" alt="" width={10} height={10} />
+        </button>
+        <div className="px-6 pb-6 pt-8 text-center">
+          <div className="mx-auto grid size-[64px] place-items-center rounded-full bg-[#FFF1F3]">
+            <Image src="/icons/trash.svg" alt="" width={28} height={28} />
+          </div>
+          <h2 className="mt-5 text-[22px] font-bold leading-none text-[#222222]">
+            ลบทีมทั้งหมดในคอร์ทนี้?
+          </h2>
+          <p className="mx-auto mt-3 max-w-[292px] text-[15px] leading-6 text-[#777777]">
+            ระบบจะลบทีมที่กำลังเล่นและทีมที่รอคิวทั้งหมด {teamCount} ทีม
+            พร้อมรีเซ็ตสนามกลับเป็นว่าง
+          </p>
+          {errorMessage ? (
+            <p className="mt-4 rounded-[9px] bg-red-50 px-3 py-2 text-[13px] text-red-500">
+              {errorMessage}
+            </p>
+          ) : null}
+          <div className="mt-6 grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              disabled={isDeleting}
+              onClick={onClose}
+              className="h-[48px] rounded-[10px] border border-[#E8EEF2] bg-white text-[16px] font-bold text-[#666666] disabled:opacity-60"
+            >
+              ยกเลิก
+            </button>
+            <button
+              type="button"
+              disabled={isDeleting}
+              onClick={onConfirm}
+              className="flex h-[48px] items-center justify-center gap-2 rounded-[10px] bg-[#FF2A3D] text-[16px] font-bold text-white shadow-[0_8px_18px_rgba(255,42,61,0.22)] disabled:opacity-60"
+            >
+              <Image src="/icons/trash.svg" alt="" width={20} height={20} />
+              {isDeleting ? "กำลังลบ..." : "ลบทั้งหมด"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const TeamListModal = ({
   teams,
   openMenuTeamId,
@@ -327,6 +393,7 @@ const TeamListModal = ({
   onToggleMenu,
   onEdit,
   onDelete,
+  onDeleteAll,
 }: {
   teams: TeamListItem[];
   openMenuTeamId: string | null;
@@ -334,6 +401,7 @@ const TeamListModal = ({
   onToggleMenu: (teamId: string) => void;
   onEdit: (team: TeamSummary) => void;
   onDelete: (team: TeamSummary) => void;
+  onDeleteAll: () => void;
 }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4 py-8">
@@ -445,6 +513,23 @@ const TeamListModal = ({
             );
           })}
         </div>
+        <div className="border-t border-[#EFF4F7] px-5 py-4">
+          <button
+            type="button"
+            disabled={teams.length === 0}
+            onClick={onDeleteAll}
+            className="flex h-[48px] w-full items-center justify-center gap-2 rounded-[10px] border border-[#FF2A3D] bg-white text-[16px] font-bold text-[#FF2A3D] disabled:border-[#E5E5E5] disabled:text-[#BBBBBB]"
+          >
+            <Image
+              src="/icons/trash.svg"
+              alt=""
+              width={20}
+              height={20}
+              className={teams.length === 0 ? "opacity-35 grayscale" : ""}
+            />
+            ลบทีมทั้งหมด
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -525,6 +610,7 @@ const QueueTeamRow = ({
 };
 
 const CourtPlayersPanel = ({
+  courtId,
   players,
   queuedPlayers,
   currentMatch,
@@ -538,6 +624,7 @@ const CourtPlayersPanel = ({
   const [openMenuTeamId, setOpenMenuTeamId] = useState<string | null>(null);
   const [editingTeam, setEditingTeam] = useState<EditingTeam | null>(null);
   const [deletingTeam, setDeletingTeam] = useState<DeletingTeam | null>(null);
+  const [isDeleteAllOpen, setIsDeleteAllOpen] = useState(false);
   const [isTeamListOpen, setIsTeamListOpen] = useState(false);
   const [isSavingTeam, setIsSavingTeam] = useState(false);
   const [teamActionError, setTeamActionError] = useState<string | null>(null);
@@ -606,6 +693,32 @@ const CourtPlayersPanel = ({
     }
 
     setDeletingTeam(null);
+    router.refresh();
+  };
+
+  const handleConfirmDeleteAllTeams = async () => {
+    if (!courtId) {
+      setTeamActionError("ไม่พบคอร์ทที่ต้องการลบทีม");
+      return;
+    }
+
+    setIsSavingTeam(true);
+    setTeamActionError(null);
+
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase.rpc("delete_all_court_teams", {
+      p_court_id: courtId,
+    });
+
+    setIsSavingTeam(false);
+
+    if (error) {
+      setTeamActionError(error.message);
+      return;
+    }
+
+    setIsDeleteAllOpen(false);
+    setIsTeamListOpen(false);
     router.refresh();
   };
 
@@ -766,6 +879,26 @@ const CourtPlayersPanel = ({
           onDelete={(team) => {
             setIsTeamListOpen(false);
             handleAskDeleteTeam(team);
+          }}
+          onDeleteAll={() => {
+            setOpenMenuTeamId(null);
+            setIsTeamListOpen(false);
+            setTeamActionError(null);
+            setIsDeleteAllOpen(true);
+          }}
+        />
+      ) : null}
+      {isDeleteAllOpen ? (
+        <DeleteAllTeamsConfirmModal
+          teamCount={allTeams.length}
+          isDeleting={isSavingTeam}
+          errorMessage={teamActionError}
+          onClose={() => {
+            setIsDeleteAllOpen(false);
+            setTeamActionError(null);
+          }}
+          onConfirm={() => {
+            void handleConfirmDeleteAllTeams();
           }}
         />
       ) : null}
