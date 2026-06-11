@@ -1,19 +1,15 @@
-import CourtDetailScreen from "@/components/courts/CourtDetailScreen";
-import { getCourtDetailData } from "@/lib/data/courts";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-type CourtPageProps = {
+type LegacyCourtPageProps = {
   params: Promise<{
     courtId: string;
   }>;
 };
 
-const CourtPage = async ({ params }: CourtPageProps) => {
+const LegacyCourtPage = async ({ params }: LegacyCourtPageProps) => {
   const { courtId } = await params;
-  const courtData = await getCourtDetailData(courtId);
 
-  return <CourtDetailScreen data={courtData} />;
+  redirect(`/admin/courts/${courtId}`);
 };
 
-export default CourtPage;
+export default LegacyCourtPage;

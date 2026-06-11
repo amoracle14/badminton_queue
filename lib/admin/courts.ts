@@ -1,0 +1,470 @@
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+
+export type CourtSummary = {
+  id: string;
+  name: string;
+  status: string;
+  playerCount: number;
+};
+
+export type PlayerSummary = {
+  id: string;
+  name: string;
+  status: string;
+};
+
+export type CourtTeamSummary = {
+  team: "A" | "B";
+  wins: number;
+  players: PlayerSummary[];
+};
+
+export type CurrentMatchSummary = {
+  id: string;
+  teams: CourtTeamSummary[];
+};
+
+export type CourtsOverviewData = {
+  groupId: string | null;
+  groupLabel: string;
+  courts: CourtSummary[];
+  isConnected: boolean;
+};
+
+export type CourtDetailData = {
+  courtId: string | null;
+  groupId: string | null;
+  courtName: string;
+  currentPlayerCount: number;
+  currentMatch: CurrentMatchSummary | null;
+  players: PlayerSummary[];
+  queuedPlayers: PlayerSummary[];
+  isConnected: boolean;
+};
+
+type CourtRow = {
+  id: string;
+  group_id?: string;
+  court_number: number;
+  status: string;
+};
+
+type MatchPlayerWithPlayerRow = {
+  id: string;
+  team: "A" | "B";
+  slot: number;
+  players:
+    | {
+        id: string;
+        name: string;
+        status: string;
+      }
+    | {
+        id: string;
+        name: string;
+        status: string;
+      }[]
+    | null;
+};
+
+type MatchWithPlayersRow = {
+  id: string;
+  team_a_wins: number | null;
+  team_b_wins: number | null;
+  match_players: MatchPlayerWithPlayerRow[] | null;
+};
+
+type PlayerCourtRow = {
+  court_id: string | null;
+  status: string;
+};
+
+type GroupRow = {
+  id: string;
+  name: string;
+  code: string;
+  courts: CourtRow[] | null;
+};
+
+const fallbackOverviewData: CourtsOverviewData = {
+  groupId: null,
+  groupLabel: "สนามทั้งหมด",
+  courts: [
+    {
+      id: "1",
+      name: "สนามที่ 1",
+      status: "ว่าง",
+      playerCount: 0,
+    },
+  ],
+  isConnected: false,
+};
+
+const buildCourtName = (courtNumber: number) => {
+  return `สนามที่ ${courtNumber}`;
+};
+
+const normalizeCourtStatus = (status: string) => {
+  if (status === "idle") {
+    return "ว่าง";
+  }
+
+  if (status === "playing") {
+    return "กำลังเล่น";
+  }
+
+  return "พักเกม";
+};
+
+const getPlayerCountsByCourt = async (courtIds: string[]) => {
+  const supabase = createServerSupabaseClient();
+  const countsByCourt = new Map<string, number>();
+
+  courtIds.forEach((courtId) => {
+    countsByCourt.set(courtId, 0);
+  });
+
+  if (!supabase || courtIds.length === 0) {
+    return countsByCourt;
+  }
+
+  const { data, error } = await supabase
+    .from("players")
+    .select("court_id,status")
+    .in("court_id", courtIds)
+    .in("status", ["waiting", "playing"]);
+
+  if (error || !data) {
+    return countsByCourt;
+  }
+
+  (data as PlayerCourtRow[]).forEach((player) => {
+    if (!player.court_id) {
+      return;
+    }
+
+    countsByCourt.set(
+      player.court_id,
+      (countsByCourt.get(player.court_id) ?? 0) + 1
+    );
+  });
+
+  return countsByCourt;
+};
+
+const getLatestGroupId = async () => {
+  const supabase = createServerSupabaseClient();
+
+  if (!supabase) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("groups")
+    .select("id")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ id: string }>();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return data.id;
+};
+
+const getActivePlayersByCourt = async (courtId: string) => {
+  const supabase = createServerSupabaseClient();
+
+  if (!supabase) {
+    return [];
+  }
+
+  const { data: match, error: matchError } = await supabase
+    .from("matches")
+    .select("id")
+    .eq("court_id", courtId)
+    .in("status", ["active", "paused"])
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ id: string }>();
+
+  if (matchError || !match) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from("match_players")
+    .select("id,team,slot,players(id,name,status)")
+    .eq("match_id", match.id)
+    .order("team", { ascending: true })
+    .order("slot", { ascending: true });
+
+  if (error || !data) {
+    return [];
+  }
+
+  return (data as MatchPlayerWithPlayerRow[])
+    .map((matchPlayer) => {
+      const player = Array.isArray(matchPlayer.players)
+        ? matchPlayer.players[0]
+        : matchPlayer.players;
+
+      if (!player) {
+        return null;
+      }
+
+      return {
+        id: player.id,
+        name: player.name,
+        status: player.status,
+      };
+    })
+    .filter((player): player is PlayerSummary => {
+      return Boolean(player);
+    });
+};
+
+const getCurrentMatchByCourt = async (
+  courtId: string
+): Promise<CurrentMatchSummary | null> => {
+  const supabase = createServerSupabaseClient();
+
+  if (!supabase) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("matches")
+    .select(
+      "id,team_a_wins,team_b_wins,match_players(id,team,slot,players(id,name,status))"
+    )
+    .eq("court_id", courtId)
+    .in("status", ["active", "paused"])
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<MatchWithPlayersRow>();
+
+  if (error || !data) {
+    return null;
+  }
+
+  const teams: CourtTeamSummary[] = [
+    {
+      team: "A",
+      wins: data.team_a_wins ?? 0,
+      players: [],
+    },
+    {
+      team: "B",
+      wins: data.team_b_wins ?? 0,
+      players: [],
+    },
+  ];
+
+  (data.match_players ?? [])
+    .slice()
+    .sort((firstPlayer, secondPlayer) => {
+      if (firstPlayer.team === secondPlayer.team) {
+        return firstPlayer.slot - secondPlayer.slot;
+      }
+
+      return firstPlayer.team.localeCompare(secondPlayer.team);
+    })
+    .forEach((matchPlayer) => {
+      const player = Array.isArray(matchPlayer.players)
+        ? matchPlayer.players[0]
+        : matchPlayer.players;
+
+      if (!player) {
+        return;
+      }
+
+      const team = teams.find((currentTeam) => {
+        return currentTeam.team === matchPlayer.team;
+      });
+
+      team?.players.push({
+        id: player.id,
+        name: player.name,
+        status: player.status,
+      });
+    });
+
+  return {
+    id: data.id,
+    teams,
+  };
+};
+
+const getCourtPlayerCount = async (courtId: string) => {
+  const supabase = createServerSupabaseClient();
+
+  if (!supabase) {
+    return 0;
+  }
+
+  const { count, error } = await supabase
+    .from("players")
+    .select("id", { count: "exact", head: true })
+    .eq("court_id", courtId)
+    .in("status", ["waiting", "playing"]);
+
+  if (error) {
+    return 0;
+  }
+
+  return count ?? 0;
+};
+
+const getQueuedPlayersByCourt = async (courtId: string) => {
+  const supabase = createServerSupabaseClient();
+
+  if (!supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from("players")
+    .select("id,name,status")
+    .eq("court_id", courtId)
+    .eq("status", "waiting")
+    .order("queue_order", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: true });
+
+  if (error || !data) {
+    return [];
+  }
+
+  return data as PlayerSummary[];
+};
+
+export const getCourtsOverviewData = async (): Promise<CourtsOverviewData> => {
+  const supabase = createServerSupabaseClient();
+
+  if (!supabase) {
+    return fallbackOverviewData;
+  }
+
+  const { data, error } = await supabase
+    .from("groups")
+    .select("id,name,code,courts(id,court_number,status)")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<GroupRow>();
+
+  if (error || !data) {
+    return fallbackOverviewData;
+  }
+
+  const sortedCourts = (data.courts ?? []).sort((firstCourt, secondCourt) => {
+    return firstCourt.court_number - secondCourt.court_number;
+  });
+  const playerCountsByCourt = await getPlayerCountsByCourt(
+    sortedCourts.map((court) => {
+      return court.id;
+    })
+  );
+  const courts = sortedCourts
+    .map((court) => {
+      return {
+        id: court.id,
+        name: buildCourtName(court.court_number),
+        status: normalizeCourtStatus(court.status),
+        playerCount: playerCountsByCourt.get(court.id) ?? 0,
+      };
+    });
+
+  return {
+    groupId: data.id,
+    groupLabel: "สนามทั้งหมด",
+    courts: courts.length > 0 ? courts : fallbackOverviewData.courts,
+    isConnected: true,
+  };
+};
+
+const getCourtById = async (courtId: string) => {
+  const supabase = createServerSupabaseClient();
+
+  if (!supabase) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("courts")
+    .select("id,group_id,court_number,status")
+    .eq("id", courtId)
+    .maybeSingle<CourtRow>();
+
+  if (error) {
+    return null;
+  }
+
+  return data;
+};
+
+const getCourtByNumberFromLatestGroup = async (courtNumber: number) => {
+  const groupId = await getLatestGroupId();
+  const supabase = createServerSupabaseClient();
+
+  if (!supabase || !groupId) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("courts")
+    .select("id,group_id,court_number,status")
+    .eq("group_id", groupId)
+    .eq("court_number", courtNumber)
+    .maybeSingle<CourtRow>();
+
+  if (error) {
+    return null;
+  }
+
+  return data;
+};
+
+export const getCourtDetailData = async (
+  courtId: string
+): Promise<CourtDetailData> => {
+  const numericCourtId = Number(courtId);
+  const court =
+    Number.isFinite(numericCourtId) && courtId.trim() !== ""
+      ? await getCourtByNumberFromLatestGroup(numericCourtId)
+      : await getCourtById(courtId);
+
+  if (!court?.group_id) {
+    return {
+      courtId: courtId,
+      groupId: null,
+      courtName: Number.isFinite(numericCourtId)
+        ? buildCourtName(numericCourtId)
+        : "สนามที่ 1",
+      currentPlayerCount: 0,
+      currentMatch: null,
+      players: [],
+      queuedPlayers: [],
+      isConnected: false,
+    };
+  }
+
+  const courtPlayerCount = await getCourtPlayerCount(court.id);
+  const currentMatch = await getCurrentMatchByCourt(court.id);
+  const activeCourtPlayers =
+    currentMatch?.teams.flatMap((team) => {
+      return team.players;
+    }) ?? (await getActivePlayersByCourt(court.id));
+  const queuedPlayers = await getQueuedPlayersByCourt(court.id);
+
+  return {
+    courtId: court.id,
+    groupId: court.group_id,
+    courtName: buildCourtName(court.court_number),
+    currentPlayerCount: courtPlayerCount,
+    currentMatch,
+    players: activeCourtPlayers,
+    queuedPlayers,
+    isConnected: true,
+  };
+};

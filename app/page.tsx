@@ -1,12 +1,7 @@
-import CourtsOverviewScreen from "@/components/courts/CourtsOverviewScreen";
-import { getCourtsOverviewData } from "@/lib/data/courts";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-const Home = async () => {
-  const overviewData = await getCourtsOverviewData();
-
-  return <CourtsOverviewScreen data={overviewData} />;
+const Home = () => {
+  redirect("/admin");
 };
 
 export default Home;

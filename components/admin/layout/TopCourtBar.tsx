@@ -15,13 +15,15 @@ const TopCourtBar = ({
   return (
     <div className="flex h-12 items-center gap-[14px] px-4">
       {showBack ? (
-        <IconButton alt="ย้อนกลับ" href="/">
-          <span className="size-[11px] -rotate-45 border-l-2 border-t-2 border-[#1597F5]" />
-        </IconButton>
+        <IconButton
+          alt="ย้อนกลับ"
+          href="/admin"
+          icon="/icons/angle-left-detail.svg"
+        />
       ) : null}
       <CourtSelectorPill label={label} />
       {detailMode ? (
-        <IconButton alt="สนาม" icon="/icons/court.svg" />
+        <IconButton alt="เอกสาร" icon="/icons/document-detail.svg" />
       ) : (
         <IconButton alt="QR Code" icon="/icons/qr-code.svg" />
       )}
