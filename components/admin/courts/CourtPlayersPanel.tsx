@@ -511,8 +511,10 @@ const TeamListModal = ({
   const [orderedTeams, setOrderedTeams] = useState<TeamListItem[]>(teams);
   const [draggingTeamId, setDraggingTeamId] = useState<string | null>(null);
   const orderedTeamsRef = useRef<TeamListItem[]>(teams);
+  const listRef = useRef<HTMLDivElement | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draggingTeamIdRef = useRef<string | null>(null);
+  const suppressClickTeamIdRef = useRef<string | null>(null);
 
   const clearLongPressTimer = () => {
     if (!longPressTimerRef.current) {
@@ -551,22 +553,22 @@ const TeamListModal = ({
     onReorder(nextWaitingTeamIds);
   };
 
-  const handlePointerDown = (
-    event: PointerEvent<HTMLDivElement>,
+  const handleDragHandlePointerDown = (
+    event: PointerEvent<HTMLButtonElement>,
     team: TeamListItem
   ) => {
-    const target = event.target as HTMLElement;
-
-    if (team.status !== "waiting" || isSavingOrder || target.closest("button")) {
+    if (team.status !== "waiting" || isSavingOrder) {
       return;
     }
 
     clearLongPressTimer();
+    suppressClickTeamIdRef.current = null;
 
     const currentTarget = event.currentTarget;
     const pointerId = event.pointerId;
 
     longPressTimerRef.current = setTimeout(() => {
+      onToggleMenu("");
       setActiveDragTeam(team.id);
 
       try {
@@ -574,7 +576,7 @@ const TeamListModal = ({
       } catch {
         // Pointer capture can fail when the pointer ended before long press.
       }
-    }, 220);
+    }, 140);
   };
 
   const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
@@ -584,42 +586,66 @@ const TeamListModal = ({
       return;
     }
 
-    const targetElement = document.elementFromPoint(
-      event.clientX,
-      event.clientY
-    );
-    const targetRow = targetElement?.closest("[data-team-list-id]");
-    const targetTeamId = targetRow?.getAttribute("data-team-list-id");
-
-    if (!targetTeamId || targetTeamId === activeTeamId) {
-      return;
-    }
-
-    const targetTeam = orderedTeamsRef.current.find((team) => {
-      return team.id === targetTeamId;
-    });
-
-    if (!targetTeam || targetTeam.status !== "waiting") {
-      return;
-    }
-
     event.preventDefault();
+
+    const listElement = listRef.current;
+
+    if (!listElement) {
+      return;
+    }
+
+    const bounds = listElement.getBoundingClientRect();
+    const topDistance = event.clientY - bounds.top;
+    const bottomDistance = bounds.bottom - event.clientY;
+
+    if (topDistance < 72) {
+      listElement.scrollTop -= 12;
+    } else if (bottomDistance < 72) {
+      listElement.scrollTop += 12;
+    }
 
     setOrderedTeams((currentTeams) => {
       const fromIndex = currentTeams.findIndex((team) => {
         return team.id === activeTeamId;
       });
+
+      if (fromIndex < 0) {
+        return currentTeams;
+      }
+
+      const waitingRows = Array.from(
+        listElement.querySelectorAll<HTMLElement>(
+          '[data-team-list-status="waiting"]'
+        )
+      );
+      const targetRow = waitingRows.find((row) => {
+        const rowBounds = row.getBoundingClientRect();
+        const rowCenterY = rowBounds.top + rowBounds.height / 2;
+
+        return event.clientY < rowCenterY;
+      });
+      const fallbackRow = waitingRows[waitingRows.length - 1];
+      const targetTeamId =
+        targetRow?.getAttribute("data-team-list-id") ??
+        fallbackRow?.getAttribute("data-team-list-id");
+
+      if (!targetTeamId || targetTeamId === activeTeamId) {
+        return currentTeams;
+      }
+
       const toIndex = currentTeams.findIndex((team) => {
         return team.id === targetTeamId;
       });
 
-      if (fromIndex < 0 || toIndex < 0) {
+      if (toIndex < 0) {
         return currentTeams;
       }
 
       const nextTeams = currentTeams.slice();
       const [movingTeam] = nextTeams.splice(fromIndex, 1);
-      nextTeams.splice(toIndex, 0, movingTeam);
+      const adjustedToIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
+
+      nextTeams.splice(adjustedToIndex, 0, movingTeam);
       orderedTeamsRef.current = nextTeams;
 
       return nextTeams;
@@ -633,6 +659,7 @@ const TeamListModal = ({
       return;
     }
 
+    suppressClickTeamIdRef.current = draggingTeamIdRef.current;
     commitReorder();
     setActiveDragTeam(null);
   };
@@ -659,6 +686,7 @@ const TeamListModal = ({
           </button>
         </div>
         <div
+          ref={listRef}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerEnd}
           onPointerCancel={handlePointerEnd}
@@ -673,18 +701,16 @@ const TeamListModal = ({
               <div
                 key={team.id}
                 data-team-list-id={team.id}
-                onPointerDown={(event) => {
-                  handlePointerDown(event, team);
-                }}
+                data-team-list-status={team.status}
                 style={{
-                  touchAction: isDragging ? "none" : "pan-y",
+                  touchAction: "pan-y",
                 }}
                 className={
                   isPlaying
                     ? "rounded-[12px] bg-[#E5F8FF] px-4 py-3 transition"
                     : isDragging
-                      ? "cursor-grabbing rounded-[12px] bg-[#F6FFE6] px-4 py-3 shadow-[0_10px_24px_rgba(29,137,228,0.18)] ring-2 ring-[var(--color-primary)] transition"
-                      : "cursor-grab rounded-[12px] bg-[#F6FFE6] px-4 py-3 transition active:scale-[0.99]"
+                      ? "rounded-[12px] bg-[#F6FFE6] px-4 py-3 shadow-[0_12px_28px_rgba(29,137,228,0.22)] ring-2 ring-[var(--color-primary)] transition-all duration-150"
+                      : "rounded-[12px] bg-[#F6FFE6] px-4 py-3 transition-all duration-150"
                 }
               >
                 <div className="flex min-h-[44px] items-center">
@@ -714,10 +740,22 @@ const TeamListModal = ({
                   <button
                     type="button"
                     aria-label="จัดการทีม"
+                    onPointerDown={(event) => {
+                      handleDragHandlePointerDown(event, team);
+                    }}
                     onClick={() => {
+                      if (suppressClickTeamIdRef.current === team.id) {
+                        suppressClickTeamIdRef.current = null;
+                        return;
+                      }
+
                       onToggleMenu(team.id);
                     }}
-                    className="ml-2 grid size-9 place-items-center rounded-full"
+                    className={
+                      team.status === "waiting"
+                        ? "ml-2 grid size-10 touch-none cursor-grab place-items-center rounded-full active:cursor-grabbing active:bg-white/70"
+                        : "ml-2 grid size-10 place-items-center rounded-full"
+                    }
                   >
                     <Image
                       src="/icons/more-vertical-blue.svg"
