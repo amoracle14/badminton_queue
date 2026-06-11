@@ -1,11 +1,18 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getCurrentAdminName } from "@/lib/session";
 
 export type CourtSummary = {
   id: string;
   name: string;
+  number: number;
   status: string;
   playerCount: number;
   teams: CourtOverviewTeamSummary[];
+};
+
+export type CourtOption = {
+  id: string;
+  name: string;
 };
 
 export type PlayerSummary = {
@@ -39,6 +46,8 @@ export type CurrentMatchSummary = {
 export type CourtsOverviewData = {
   groupId: string | null;
   groupLabel: string;
+  adminName: string | null;
+  courtOptions: CourtOption[];
   courts: CourtSummary[];
   isConnected: boolean;
 };
@@ -47,6 +56,8 @@ export type CourtDetailData = {
   courtId: string | null;
   groupId: string | null;
   courtName: string;
+  adminName: string | null;
+  courtOptions: CourtOption[];
   currentPlayerCount: number;
   currentMatch: CurrentMatchSummary | null;
   players: PlayerSummary[];
@@ -112,16 +123,20 @@ type GroupRow = {
   id: string;
   name: string;
   code: string;
+  admin_name?: string | null;
   courts: CourtRow[] | null;
 };
 
 const fallbackOverviewData: CourtsOverviewData = {
   groupId: null,
   groupLabel: "สนามทั้งหมด",
+  adminName: null,
+  courtOptions: [],
   courts: [
     {
       id: "1",
       name: "สนามที่ 1",
+      number: 1,
       status: "ว่าง",
       playerCount: 0,
       teams: [],
@@ -182,16 +197,17 @@ const getPlayerCountsByCourt = async (courtIds: string[]) => {
   return countsByCourt;
 };
 
-const getLatestGroupId = async () => {
+const getLatestGroupId = async (adminName: string | null) => {
   const supabase = createServerSupabaseClient();
 
-  if (!supabase) {
+  if (!supabase || !adminName) {
     return null;
   }
 
   const { data, error } = await supabase
     .from("groups")
     .select("id")
+    .eq("admin_name", adminName)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle<{ id: string }>();
@@ -391,20 +407,37 @@ const getActiveTeamsByCourt = async (courtIds: string[]) => {
 
 export const getCourtsOverviewData = async (): Promise<CourtsOverviewData> => {
   const supabase = createServerSupabaseClient();
+  const adminName = await getCurrentAdminName();
+
+  if (!adminName) {
+    return {
+      ...fallbackOverviewData,
+      courts: [],
+    };
+  }
 
   if (!supabase) {
-    return fallbackOverviewData;
+    return {
+      ...fallbackOverviewData,
+      adminName,
+      courts: [],
+    };
   }
 
   const { data, error } = await supabase
     .from("groups")
-    .select("id,name,code,courts(id,court_number,status)")
+    .select("id,name,code,admin_name,courts(id,court_number,status)")
+    .eq("admin_name", adminName)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle<GroupRow>();
 
   if (error || !data) {
-    return fallbackOverviewData;
+    return {
+      ...fallbackOverviewData,
+      adminName,
+      courts: [],
+    };
   }
 
   const sortedCourts = (data.courts ?? []).sort((firstCourt, secondCourt) => {
@@ -422,6 +455,7 @@ export const getCourtsOverviewData = async (): Promise<CourtsOverviewData> => {
       return {
         id: court.id,
         name: buildCourtName(court.court_number),
+        number: court.court_number,
         status: normalizeCourtStatus(court.status),
         playerCount: playerCountsByCourt.get(court.id) ?? 0,
         teams: activeTeamsByCourt.get(court.id) ?? [],
@@ -431,7 +465,14 @@ export const getCourtsOverviewData = async (): Promise<CourtsOverviewData> => {
   return {
     groupId: data.id,
     groupLabel: "สนามทั้งหมด",
-    courts: courts.length > 0 ? courts : fallbackOverviewData.courts,
+    adminName,
+    courtOptions: courts.map((court) => {
+      return {
+        id: court.id,
+        name: court.name,
+      };
+    }),
+    courts,
     isConnected: true,
   };
 };
@@ -456,8 +497,11 @@ const getCourtById = async (courtId: string) => {
   return data;
 };
 
-const getCourtByNumberFromLatestGroup = async (courtNumber: number) => {
-  const groupId = await getLatestGroupId();
+const getCourtByNumberFromLatestGroup = async (
+  courtNumber: number,
+  adminName: string | null
+) => {
+  const groupId = await getLatestGroupId(adminName);
   const supabase = createServerSupabaseClient();
 
   if (!supabase || !groupId) {
@@ -481,19 +525,27 @@ const getCourtByNumberFromLatestGroup = async (courtNumber: number) => {
 export const getCourtDetailData = async (
   courtId: string
 ): Promise<CourtDetailData> => {
+  const overviewData = await getCourtsOverviewData();
+  const adminName = overviewData.adminName;
   const numericCourtId = Number(courtId);
   const court =
     Number.isFinite(numericCourtId) && courtId.trim() !== ""
-      ? await getCourtByNumberFromLatestGroup(numericCourtId)
+      ? await getCourtByNumberFromLatestGroup(numericCourtId, adminName)
       : await getCourtById(courtId);
 
-  if (!court?.group_id) {
+  const canAccessCourt = overviewData.courtOptions.some((option) => {
+    return option.id === court?.id;
+  });
+
+  if (!court?.group_id || !canAccessCourt) {
     return {
       courtId: courtId,
       groupId: null,
       courtName: Number.isFinite(numericCourtId)
         ? buildCourtName(numericCourtId)
         : "สนามที่ 1",
+      adminName,
+      courtOptions: overviewData.courtOptions,
       currentPlayerCount: 0,
       currentMatch: null,
       players: [],
@@ -516,6 +568,8 @@ export const getCourtDetailData = async (
     courtId: court.id,
     groupId: court.group_id,
     courtName: buildCourtName(court.court_number),
+    adminName,
+    courtOptions: overviewData.courtOptions,
     currentPlayerCount: courtPlayerCount,
     currentMatch,
     players: activeCourtPlayers,

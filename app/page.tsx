@@ -1,7 +1,7 @@
-import { redirect } from "next/navigation";
+import LoginScreen from "@/components/auth/LoginScreen";
 
 const Home = () => {
-  redirect("/admin");
+  return <LoginScreen />;
 };
 
 export default Home;
