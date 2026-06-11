@@ -1,9 +1,8 @@
 import Image from "next/image";
-import BottomNav from "@/components/layout/BottomNav";
-import MobileAppShell from "@/components/layout/MobileAppShell";
-import TopCourtBar from "@/components/layout/TopCourtBar";
-import CourtCard from "@/components/courts/CourtCard";
-import type { CourtsOverviewData } from "@/lib/data/courts";
+import MobileAppShell from "@/components/admin/layout/MobileAppShell";
+import TopCourtBar from "@/components/admin/layout/TopCourtBar";
+import CourtCard from "@/components/admin/courts/CourtCard";
+import type { CourtsOverviewData } from "@/lib/admin/courts";
 
 type CourtsOverviewScreenProps = {
   data: CourtsOverviewData;
@@ -47,7 +46,6 @@ const CourtsOverviewScreen = ({ data }: CourtsOverviewScreenProps) => {
         </div>
       </section>
 
-      <BottomNav />
     </MobileAppShell>
   );
 };

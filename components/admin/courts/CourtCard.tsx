@@ -11,7 +11,7 @@ type CourtCardProps = {
 const CourtCard = ({ id, name, status, playerCount }: CourtCardProps) => {
   return (
     <Link
-      href={`/courts/${id}`}
+      href={`/admin/courts/${id}`}
       className="block min-h-[204px] rounded-[14px] bg-white px-4 py-[17px] shadow-[0_10px_32px_rgba(64,169,255,0.08)]"
     >
       <div className="flex items-center justify-between">

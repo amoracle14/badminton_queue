@@ -12,6 +12,7 @@ type TeamDraft = {
 
 type AddTeamsModalProps = {
   groupId: string | null;
+  courtId: string | null;
   currentPlayerCount: number;
   onClose: () => void;
   onSaved: () => void;
@@ -27,6 +28,7 @@ const createTeamDraft = (id: number): TeamDraft => {
 
 const AddTeamsModal = ({
   groupId,
+  courtId,
   currentPlayerCount,
   onClose,
   onSaved,
@@ -40,7 +42,11 @@ const AddTeamsModal = ({
     return team.playerOne.trim().length > 0 && team.playerTwo.trim().length > 0;
   });
   const canEnterCourt =
-    Boolean(groupId) && hasMinimumTeams && areAllNamesFilled && !isSubmitting;
+    Boolean(groupId) &&
+    Boolean(courtId) &&
+    hasMinimumTeams &&
+    areAllNamesFilled &&
+    !isSubmitting;
   const statusColor = hasMinimumTeams ? "#23C55E" : "#CCCCCC";
   const trashColor = hasMinimumTeams ? "#FF2A3D" : "#CCCCCC";
 
@@ -98,6 +104,7 @@ const AddTeamsModal = ({
     const playerRows = playerNames.map((name, index) => {
       return {
         group_id: groupId,
+        court_id: courtId,
         name,
         status: "waiting",
         queue_order: currentPlayerCount + index + 1,
@@ -106,13 +113,30 @@ const AddTeamsModal = ({
     const supabase = createBrowserSupabaseClient();
     const { error } = await supabase.from("players").insert(playerRows);
 
-    setIsSubmitting(false);
-
     if (error) {
+      setIsSubmitting(false);
       setErrorMessage(error.message);
       return;
     }
 
+    const nextPlayerCount = currentPlayerCount + playerRows.length;
+
+    if (courtId && nextPlayerCount >= 4) {
+      const { error: matchError } = await supabase.rpc(
+        "start_next_match_for_court",
+        {
+          p_court_id: courtId,
+        }
+      );
+
+      if (matchError) {
+        setIsSubmitting(false);
+        setErrorMessage(matchError.message);
+        return;
+      }
+    }
+
+    setIsSubmitting(false);
     onSaved();
   };
 
