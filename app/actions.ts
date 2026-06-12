@@ -3,7 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { ADMIN_NAME_COOKIE, normalizeAdminName } from "@/lib/session";
+import { randomUUID } from "crypto";
+import {
+  ADMIN_NAME_COOKIE,
+  ADMIN_SESSION_COOKIE,
+  normalizeAdminName,
+} from "@/lib/session";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 type ActionState = {
@@ -22,6 +27,16 @@ const getText = (formData: FormData, key: string) => {
   return String(formData.get(key) ?? "").trim();
 };
 
+const setAdminSessionCookie = async (adminSessionId: string) => {
+  const cookieStore = await cookies();
+
+  cookieStore.set(ADMIN_SESSION_COOKIE, adminSessionId, {
+    path: "/",
+    maxAge: 60 * 60 * 24 * 30,
+    sameSite: "lax",
+  });
+};
+
 export const loginWithName = async (
   _previousState: ActionState,
   formData: FormData
@@ -33,11 +48,14 @@ export const loginWithName = async (
   }
 
   const cookieStore = await cookies();
+  const adminSessionId = randomUUID();
+
   cookieStore.set(ADMIN_NAME_COOKIE, encodeURIComponent(adminName), {
     path: "/",
     maxAge: 60 * 60 * 24 * 30,
     sameSite: "lax",
   });
+  await setAdminSessionCookie(adminSessionId);
 
   redirect("/home");
 };
@@ -50,9 +68,15 @@ export const createGroup = async (
   const adminName = normalizeAdminName(
     decodeURIComponent(cookieStore.get(ADMIN_NAME_COOKIE)?.value ?? "")
   );
+  let adminSessionId = cookieStore.get(ADMIN_SESSION_COOKIE)?.value ?? "";
 
   if (!adminName) {
     redirect("/");
+  }
+
+  if (!adminSessionId) {
+    adminSessionId = randomUUID();
+    await setAdminSessionCookie(adminSessionId);
   }
 
   const venueName = getText(formData, "venueName");
@@ -85,6 +109,7 @@ export const createGroup = async (
 
   const { error } = await supabase.rpc("create_admin_group_with_court", {
     p_admin_name: adminName,
+    p_admin_session_id: adminSessionId,
     p_venue_name: venueName,
     p_group_name: groupName,
     p_description: description,
@@ -110,6 +135,7 @@ export const addCourtToCurrentGroup = async (
   const adminName = normalizeAdminName(
     decodeURIComponent(cookieStore.get(ADMIN_NAME_COOKIE)?.value ?? "")
   );
+  let adminSessionId = cookieStore.get(ADMIN_SESSION_COOKIE)?.value ?? "";
   const groupId = getText(formData, "groupId");
   const courtNumber = Number(getText(formData, "courtNumber"));
   const scheduledAt = getText(formData, "scheduledAt");
@@ -117,6 +143,11 @@ export const addCourtToCurrentGroup = async (
 
   if (!adminName) {
     redirect("/");
+  }
+
+  if (!adminSessionId) {
+    adminSessionId = randomUUID();
+    await setAdminSessionCookie(adminSessionId);
   }
 
   if (!groupId || !scheduledAt) {
@@ -139,6 +170,7 @@ export const addCourtToCurrentGroup = async (
 
   const { error } = await supabase.rpc("add_admin_court_booking", {
     p_admin_name: adminName,
+    p_admin_session_id: adminSessionId,
     p_group_id: groupId,
     p_court_number: courtNumber,
     p_scheduled_at: scheduledAt,

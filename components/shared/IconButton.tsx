@@ -5,6 +5,7 @@ type IconButtonProps = {
   alt: string;
   href?: string;
   icon?: string;
+  onClick?: () => void;
   children?: React.ReactNode;
 };
 
@@ -12,6 +13,7 @@ const IconButton = ({
   alt,
   href,
   icon,
+  onClick,
   children,
 }: IconButtonProps) => {
   const className =
@@ -31,7 +33,7 @@ const IconButton = ({
   }
 
   return (
-    <button type="button" aria-label={alt} className={className}>
+    <button type="button" aria-label={alt} onClick={onClick} className={className}>
       {content}
     </button>
   );

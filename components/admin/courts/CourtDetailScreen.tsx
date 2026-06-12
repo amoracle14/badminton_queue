@@ -130,6 +130,7 @@ const CourtDetailScreen = ({ data }: CourtDetailScreenProps) => {
           detailMode
           courtOptions={data.courtOptions}
           includeAllOption
+          groupCode={data.groupCode}
         />
       </div>
 
