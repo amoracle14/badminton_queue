@@ -8,6 +8,8 @@ import { createGroup } from "@/app/actions";
 const initialState = {
   ok: false,
   message: null,
+  groupCode: null,
+  adminKey: null,
 };
 
 type FieldIconProps = {
@@ -86,7 +88,7 @@ const CreateGroupScreen = () => {
 
           <label className="block">
             <span className="text-[13px] font-medium text-[#636363]">
-              คำอธิบายแก๊ง&ก๊วน <span className="text-[var(--color-danger)]">*</span>
+              คำอธิบายแก๊ง&ก๊วน
             </span>
             <div className="relative mt-2">
               <Image
@@ -179,20 +181,58 @@ const CreateGroupScreen = () => {
           </div>
         </div>
 
-        {state.message ? (
+        {!state.ok && state.message ? (
           <p className="mt-4 rounded-[9px] bg-red-50 px-3 py-2 text-[13px] text-[var(--color-danger)]">
             {state.message}
           </p>
         ) : null}
 
-        <button
-          type="submit"
-          disabled={isPending}
-          className="mt-[72px] h-[49px] w-full rounded-[9px] bg-[var(--color-primary)] text-[16px] font-bold text-white disabled:bg-[#CCCCCC]"
-        >
-          {isPending ? "กำลังสร้าง..." : "สร้าง"}
-        </button>
+        {!state.ok ? (
+          <button
+            type="submit"
+            disabled={isPending}
+            className="mt-[72px] h-[49px] w-full rounded-[9px] bg-[var(--color-primary)] text-[16px] font-bold text-white disabled:bg-[#CCCCCC]"
+          >
+            {isPending ? "กำลังสร้าง..." : "สร้าง"}
+          </button>
+        ) : null}
       </form>
+
+      {state.ok ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4">
+          <section className="w-full max-w-[408px] rounded-[18px] bg-white p-5 shadow-[0_18px_44px_rgba(0,0,0,0.18)]">
+            <div className="rounded-[14px] bg-[#F3F9FF] p-4">
+              <p className="text-[18px] font-bold text-[var(--color-text)]">
+                สร้างก๊วนสำเร็จ
+              </p>
+              <p className="mt-2 text-[14px] leading-[22px] text-[#636363]">
+                เก็บรหัสกู้คืนนี้ไว้ เพื่อเปลี่ยนเครื่องหรือเข้าจากเครื่องอื่น
+              </p>
+              <div className="mt-4 space-y-3">
+                <div className="min-w-0 rounded-[10px] bg-white px-4 py-4">
+                  <p className="text-[12px] font-medium text-[#989898]">รหัสก๊วน</p>
+                  <p className="mt-2 break-all text-[22px] font-bold leading-[28px] text-[var(--color-primary)]">
+                    {state.groupCode ?? "-"}
+                  </p>
+                </div>
+                <div className="min-w-0 rounded-[10px] bg-white px-4 py-4">
+                  <p className="text-[12px] font-medium text-[#989898]">รหัสกู้คืน</p>
+                  <p className="mt-2 break-all text-[22px] font-bold leading-[28px] text-[var(--color-primary)]">
+                    {state.adminKey ?? "-"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <Link
+              href="/admin"
+              className="mt-5 grid h-[52px] w-full place-items-center rounded-[10px] bg-[var(--color-primary)] text-[17px] font-bold text-white"
+            >
+              ไปจัดการก๊วน
+            </Link>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 };

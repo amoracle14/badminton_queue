@@ -5,6 +5,26 @@ type HomeMenuScreenProps = {
   adminName: string;
 };
 
+type MenuCardProps = {
+  href: string;
+  icon: string;
+  label: string;
+};
+
+const MenuCard = ({ href, icon, label }: MenuCardProps) => {
+  return (
+    <Link
+      href={href}
+      className="flex min-h-[138px] flex-col justify-between overflow-hidden rounded-[14px] bg-white p-4 shadow-[0_12px_30px_rgba(29,137,228,0.10)]"
+    >
+      <Image src={icon} alt="" width={78} height={58} />
+      <span className="text-[15px] font-bold text-[var(--color-text)]">
+        {label}
+      </span>
+    </Link>
+  );
+};
+
 const HomeMenuScreen = ({ adminName }: HomeMenuScreenProps) => {
   return (
     <main className="mx-auto min-h-dvh w-full max-w-[440px] bg-[#FBFFFF] px-6 pb-10 pt-8 font-sans">
@@ -19,25 +39,17 @@ const HomeMenuScreen = ({ adminName }: HomeMenuScreenProps) => {
         <h2 className="text-[22px] font-bold text-[var(--color-text)]">เมนู</h2>
 
         <div className="mt-5 grid grid-cols-2 gap-4">
-          <Link
-            href="/groups/new"
-            className="flex min-h-[138px] flex-col justify-between overflow-hidden rounded-[14px] bg-white p-4 shadow-[0_12px_30px_rgba(29,137,228,0.10)]"
-          >
-            <Image src="/icons/menu-create-group.svg" alt="" width={78} height={58} />
-            <span className="text-[15px] font-bold text-[var(--color-text)]">
-              สร้างแก๊ง&ก๊วน
-            </span>
-          </Link>
+          <MenuCard
+            href="/groups"
+            icon="/icons/menu-create-group.svg"
+            label="สร้างแก๊ง&ก๊วน"
+          />
 
-          <Link
+          <MenuCard
             href="/join"
-            className="flex min-h-[138px] flex-col justify-between overflow-hidden rounded-[14px] bg-white p-4 shadow-[0_12px_30px_rgba(29,137,228,0.10)]"
-          >
-            <Image src="/icons/menu-join-group.svg" alt="" width={78} height={58} />
-            <span className="text-[15px] font-bold text-[var(--color-text)]">
-              เข้าร่วมแก๊ง&ก๊วน
-            </span>
-          </Link>
+            icon="/icons/menu-join-group.svg"
+            label="เข้าร่วมแก๊ง&ก๊วน"
+          />
         </div>
       </section>
     </main>

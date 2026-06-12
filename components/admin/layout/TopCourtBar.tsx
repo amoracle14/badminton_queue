@@ -51,7 +51,7 @@ const TopCourtBar = ({
           />
         )}
         <IconButton alt="ตั้งค่า" icon="/icons/settings-sliders.svg" />
-        <IconButton alt="สนาม" icon="/icons/court.svg" />
+        <IconButton alt="กลับหน้า Home" href="/home" icon="/icons/court.svg" />
       </div>
 
       {isCodeOpen ? (

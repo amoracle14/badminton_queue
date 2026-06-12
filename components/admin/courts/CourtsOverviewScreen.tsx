@@ -29,7 +29,7 @@ const CourtsOverviewScreen = ({ data }: CourtsOverviewScreenProps) => {
       startTransition(() => {
         router.refresh();
       });
-    }, 120);
+    }, 450);
   }, [router]);
 
   useEffect(() => {
