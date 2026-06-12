@@ -196,9 +196,13 @@ const UserTopBar = ({ courtName }: { courtName: string }) => {
       <div className="grid size-9 shrink-0 place-items-center rounded-full bg-white shadow-[0_8px_24px_rgba(29,137,228,0.08)]">
         <Image src="/icons/settings-sliders.svg" alt="" width={24} height={24} />
       </div>
-      <div className="grid size-9 shrink-0 place-items-center rounded-full bg-white shadow-[0_8px_24px_rgba(29,137,228,0.08)]">
-        <Image src="/icons/account-circle.svg" alt="" width={24} height={24} />
-      </div>
+      <Link
+        href="/home"
+        aria-label="กลับหน้า Home"
+        className="grid size-9 shrink-0 place-items-center rounded-full bg-white shadow-[0_8px_24px_rgba(29,137,228,0.08)]"
+      >
+        <Image src="/icons/home-profile.svg" alt="" width={24} height={24} />
+      </Link>
     </div>
   );
 };
@@ -248,24 +252,24 @@ const UserQueueScreen = ({ data }: UserQueueScreenProps) => {
       startTransition(() => {
         router.refresh();
       });
-    }, 120);
+    }, 450);
   }, [router]);
 
   useEffect(() => {
-    if (!data.groupId) {
+    if (!data.courtId) {
       return;
     }
 
     const supabase = createBrowserSupabaseClient();
     const channel = supabase
-      .channel(`user-queue:${data.groupId}`)
+      .channel(`user-queue:${data.courtId}`)
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
           table: "players",
-          filter: `group_id=eq.${data.groupId}`,
+          filter: `court_id=eq.${data.courtId}`,
         },
         () => {
           scheduleRefresh();
@@ -277,7 +281,7 @@ const UserQueueScreen = ({ data }: UserQueueScreenProps) => {
           event: "*",
           schema: "public",
           table: "matches",
-          filter: `group_id=eq.${data.groupId}`,
+          filter: `court_id=eq.${data.courtId}`,
         },
         () => {
           scheduleRefresh();
@@ -292,7 +296,7 @@ const UserQueueScreen = ({ data }: UserQueueScreenProps) => {
 
       void supabase.removeChannel(channel);
     };
-  }, [data.groupId, scheduleRefresh]);
+  }, [data.courtId, scheduleRefresh]);
 
   if (!data.isConnected || !data.groupId) {
     return <NotFoundState groupCode={data.groupCode} />;

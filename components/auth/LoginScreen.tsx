@@ -37,6 +37,7 @@ const LoginScreen = () => {
             ชื่อผู้ใช้
           </label>
           <input
+            suppressHydrationWarning
             name="adminName"
             type="text"
             autoComplete="name"
@@ -51,6 +52,7 @@ const LoginScreen = () => {
           ) : null}
 
           <button
+            suppressHydrationWarning
             type="submit"
             disabled={isPending}
             className="mt-5 h-[50px] w-full rounded-[12px] bg-[var(--color-primary)] text-[16px] font-bold text-white shadow-[0_12px_24px_rgba(29,137,228,0.18)] disabled:bg-[#CCCCCC]"

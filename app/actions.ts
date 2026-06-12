@@ -14,6 +14,8 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 type ActionState = {
   ok: boolean;
   message: string | null;
+  groupCode?: string | null;
+  adminKey?: string | null;
 };
 
 const errorState = (message: string): ActionState => {
@@ -27,6 +29,18 @@ const getText = (formData: FormData, key: string) => {
   return String(formData.get(key) ?? "").trim();
 };
 
+const formatAdminRecoveryKey = (value: string) => {
+  const normalizedValue = value
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 11);
+  const firstPart = normalizedValue.slice(0, 3);
+  const secondPart = normalizedValue.slice(3, 7);
+  const thirdPart = normalizedValue.slice(7, 11);
+
+  return [firstPart, secondPart, thirdPart].filter(Boolean).join("-");
+};
+
 const setAdminSessionCookie = async (adminSessionId: string) => {
   const cookieStore = await cookies();
 
@@ -35,6 +49,20 @@ const setAdminSessionCookie = async (adminSessionId: string) => {
     maxAge: 60 * 60 * 24 * 30,
     sameSite: "lax",
   });
+};
+
+const ensureAdminSessionCookie = async () => {
+  const cookieStore = await cookies();
+  const existingSessionId = cookieStore.get(ADMIN_SESSION_COOKIE)?.value ?? "";
+
+  if (existingSessionId) {
+    return existingSessionId;
+  }
+
+  const adminSessionId = randomUUID();
+  await setAdminSessionCookie(adminSessionId);
+
+  return adminSessionId;
 };
 
 export const loginWithName = async (
@@ -68,16 +96,12 @@ export const createGroup = async (
   const adminName = normalizeAdminName(
     decodeURIComponent(cookieStore.get(ADMIN_NAME_COOKIE)?.value ?? "")
   );
-  let adminSessionId = cookieStore.get(ADMIN_SESSION_COOKIE)?.value ?? "";
 
   if (!adminName) {
     redirect("/");
   }
 
-  if (!adminSessionId) {
-    adminSessionId = randomUUID();
-    await setAdminSessionCookie(adminSessionId);
-  }
+  const adminSessionId = await ensureAdminSessionCookie();
 
   const venueName = getText(formData, "venueName");
   const groupName = getText(formData, "groupName");
@@ -89,7 +113,7 @@ export const createGroup = async (
   const courtNumber = Number(courtNumberRaw);
   const durationHours = Number(durationHoursRaw);
 
-  if (!venueName || !groupName || !description || !scheduledAt) {
+  if (!venueName || !groupName || !scheduledAt) {
     return errorState("กรุณากรอกข้อมูลให้ครบ");
   }
 
@@ -107,7 +131,7 @@ export const createGroup = async (
     return errorState("ยังไม่ได้ตั้งค่า Supabase environment");
   }
 
-  const { error } = await supabase.rpc("create_admin_group_with_court", {
+  const { data, error } = await supabase.rpc("create_admin_group_with_court", {
     p_admin_name: adminName,
     p_admin_session_id: adminSessionId,
     p_venue_name: venueName,
@@ -124,7 +148,73 @@ export const createGroup = async (
   }
 
   revalidatePath("/admin");
-  redirect("/admin");
+  revalidatePath("/home");
+
+  const createdGroup =
+    data && typeof data === "object" && !Array.isArray(data)
+      ? (data as { group_code?: string; admin_key?: string })
+      : null;
+
+  return {
+    ok: true,
+    message: null,
+    groupCode: createdGroup?.group_code ?? null,
+    adminKey: createdGroup?.admin_key ?? null,
+  };
+};
+
+export const recoverGroup = async (
+  _previousState: ActionState,
+  formData: FormData
+) => {
+  const cookieStore = await cookies();
+  const adminName = normalizeAdminName(
+    decodeURIComponent(cookieStore.get(ADMIN_NAME_COOKIE)?.value ?? "")
+  );
+
+  if (!adminName) {
+    redirect("/");
+  }
+
+  const adminSessionId = await ensureAdminSessionCookie();
+  const groupCode = getText(formData, "groupCode").toUpperCase();
+  const adminKey = formatAdminRecoveryKey(getText(formData, "adminKey"));
+
+  if (!groupCode || !adminKey) {
+    return errorState("กรุณากรอกรหัสก๊วนและรหัสกู้คืน");
+  }
+
+  const supabase = createServerSupabaseClient();
+
+  if (!supabase) {
+    return errorState("ยังไม่ได้ตั้งค่า Supabase environment");
+  }
+
+  const { data, error } = await supabase.rpc("recover_admin_group", {
+    p_admin_name: adminName,
+    p_admin_session_id: adminSessionId,
+    p_group_code: groupCode,
+    p_admin_key: adminKey,
+  });
+
+  if (error) {
+    return errorState(error.message);
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/home");
+
+  const recoveredGroup =
+    data && typeof data === "object" && !Array.isArray(data)
+      ? (data as { group_code?: string; admin_key?: string })
+      : null;
+
+  return {
+    ok: true,
+    message: "กู้คืนก๊วนสำเร็จ",
+    groupCode: recoveredGroup?.group_code ?? groupCode,
+    adminKey: recoveredGroup?.admin_key ?? adminKey,
+  };
 };
 
 export const addCourtToCurrentGroup = async (

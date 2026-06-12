@@ -32,7 +32,7 @@ const CourtDetailScreen = ({ data }: CourtDetailScreenProps) => {
       startTransition(() => {
         router.refresh();
       });
-    }, 120);
+    }, 450);
   }, [router]);
 
   const handleOpenAddTeams = () => {
@@ -73,20 +73,20 @@ const CourtDetailScreen = ({ data }: CourtDetailScreenProps) => {
   };
 
   useEffect(() => {
-    if (!data.groupId) {
+    if (!data.courtId) {
       return;
     }
 
     const supabase = createBrowserSupabaseClient();
     const channel = supabase
-      .channel(`court-detail:${data.groupId}`)
+      .channel(`court-detail:${data.courtId}`)
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
           table: "players",
-          filter: `group_id=eq.${data.groupId}`,
+          filter: `court_id=eq.${data.courtId}`,
         },
         () => {
           scheduleRefresh();
@@ -98,7 +98,7 @@ const CourtDetailScreen = ({ data }: CourtDetailScreenProps) => {
           event: "*",
           schema: "public",
           table: "matches",
-          filter: `group_id=eq.${data.groupId}`,
+          filter: `court_id=eq.${data.courtId}`,
         },
         () => {
           scheduleRefresh();
@@ -113,7 +113,7 @@ const CourtDetailScreen = ({ data }: CourtDetailScreenProps) => {
 
       void supabase.removeChannel(channel);
     };
-  }, [data.groupId, router, scheduleRefresh]);
+  }, [data.courtId, router, scheduleRefresh]);
 
   return (
     <MobileAppShell fullBleed={hasPlayers}>

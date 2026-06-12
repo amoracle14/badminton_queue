@@ -130,6 +130,14 @@ type GroupRow = {
   courts: CourtRow[] | null;
 };
 
+type AdminGroupShellData = {
+  groupId: string | null;
+  groupCode: string | null;
+  adminName: string | null;
+  courtOptions: CourtOption[];
+  courts: CourtRow[];
+};
+
 const fallbackOverviewData: CourtsOverviewData = {
   groupId: null,
   groupCode: null,
@@ -201,26 +209,64 @@ const getPlayerCountsByCourt = async (courtIds: string[]) => {
   return countsByCourt;
 };
 
-const getLatestGroupId = async (adminSessionId: string | null) => {
+const getAdminGroupShellData = async (): Promise<AdminGroupShellData> => {
   const supabase = createServerSupabaseClient();
+  const adminSession = await getCurrentAdminSession();
 
-  if (!supabase || !adminSessionId) {
-    return null;
+  if (!adminSession) {
+    return {
+      groupId: null,
+      groupCode: null,
+      adminName: null,
+      courtOptions: [],
+      courts: [],
+    };
+  }
+
+  if (!supabase) {
+    return {
+      groupId: null,
+      groupCode: null,
+      adminName: adminSession.adminName,
+      courtOptions: [],
+      courts: [],
+    };
   }
 
   const { data, error } = await supabase
     .from("groups")
-    .select("id")
-    .eq("admin_session_id", adminSessionId)
+    .select("id,code,admin_name,admin_session_id,courts(id,group_id,court_number,status)")
+    .eq("admin_session_id", adminSession.adminSessionId)
     .order("created_at", { ascending: false })
     .limit(1)
-    .maybeSingle<{ id: string }>();
+    .maybeSingle<GroupRow>();
 
   if (error || !data) {
-    return null;
+    return {
+      groupId: null,
+      groupCode: null,
+      adminName: adminSession.adminName,
+      courtOptions: [],
+      courts: [],
+    };
   }
 
-  return data.id;
+  const courts = (data.courts ?? []).sort((firstCourt, secondCourt) => {
+    return firstCourt.court_number - secondCourt.court_number;
+  });
+
+  return {
+    groupId: data.id,
+    groupCode: data.code,
+    adminName: adminSession.adminName,
+    courts,
+    courtOptions: courts.map((court) => {
+      return {
+        id: court.id,
+        name: buildCourtName(court.court_number),
+      };
+    }),
+  };
 };
 
 const getTeamsFromMatch = (match: MatchWithPlayersRow) => {
@@ -482,67 +528,44 @@ export const getCourtsOverviewData = async (): Promise<CourtsOverviewData> => {
   };
 };
 
-const getCourtById = async (courtId: string) => {
+export const hasCurrentAdminGroup = async () => {
   const supabase = createServerSupabaseClient();
+  const adminSession = await getCurrentAdminSession();
 
-  if (!supabase) {
-    return null;
+  if (!supabase || !adminSession) {
+    return false;
   }
 
   const { data, error } = await supabase
-    .from("courts")
-    .select("id,group_id,court_number,status")
-    .eq("id", courtId)
-    .maybeSingle<CourtRow>();
+    .from("groups")
+    .select("id")
+    .eq("admin_session_id", adminSession.adminSessionId)
+    .limit(1)
+    .maybeSingle<{ id: string }>();
 
   if (error) {
-    return null;
+    return false;
   }
 
-  return data;
-};
-
-const getCourtByNumberFromLatestGroup = async (
-  courtNumber: number,
-  adminSessionId: string | null
-) => {
-  const groupId = await getLatestGroupId(adminSessionId);
-  const supabase = createServerSupabaseClient();
-
-  if (!supabase || !groupId) {
-    return null;
-  }
-
-  const { data, error } = await supabase
-    .from("courts")
-    .select("id,group_id,court_number,status")
-    .eq("group_id", groupId)
-    .eq("court_number", courtNumber)
-    .maybeSingle<CourtRow>();
-
-  if (error) {
-    return null;
-  }
-
-  return data;
+  return Boolean(data);
 };
 
 export const getCourtDetailData = async (
   courtId: string
 ): Promise<CourtDetailData> => {
-  const overviewData = await getCourtsOverviewData();
-  const adminSession = await getCurrentAdminSession();
-  const adminName = overviewData.adminName;
+  const shellData = await getAdminGroupShellData();
+  const adminName = shellData.adminName;
   const numericCourtId = Number(courtId);
   const court =
     Number.isFinite(numericCourtId) && courtId.trim() !== ""
-      ? await getCourtByNumberFromLatestGroup(
-          numericCourtId,
-          adminSession?.adminSessionId ?? null
-        )
-      : await getCourtById(courtId);
+      ? shellData.courts.find((currentCourt) => {
+          return currentCourt.court_number === numericCourtId;
+        }) ?? null
+      : shellData.courts.find((currentCourt) => {
+          return currentCourt.id === courtId;
+        }) ?? null;
 
-  const canAccessCourt = overviewData.courtOptions.some((option) => {
+  const canAccessCourt = shellData.courtOptions.some((option) => {
     return option.id === court?.id;
   });
 
@@ -550,12 +573,12 @@ export const getCourtDetailData = async (
     return {
       courtId: courtId,
       groupId: null,
-      groupCode: overviewData.groupCode,
+      groupCode: shellData.groupCode,
       courtName: Number.isFinite(numericCourtId)
         ? buildCourtName(numericCourtId)
         : "สนามที่ 1",
       adminName,
-      courtOptions: overviewData.courtOptions,
+      courtOptions: shellData.courtOptions,
       currentPlayerCount: 0,
       currentMatch: null,
       players: [],
@@ -577,10 +600,10 @@ export const getCourtDetailData = async (
   return {
     courtId: court.id,
     groupId: court.group_id,
-    groupCode: overviewData.groupCode,
+    groupCode: shellData.groupCode,
     courtName: buildCourtName(court.court_number),
     adminName,
-    courtOptions: overviewData.courtOptions,
+    courtOptions: shellData.courtOptions,
     currentPlayerCount: courtPlayerCount,
     currentMatch,
     players: activeCourtPlayers,
