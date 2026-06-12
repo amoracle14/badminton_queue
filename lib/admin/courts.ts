@@ -1,5 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { getCurrentAdminName } from "@/lib/session";
+import { getCurrentAdminSession } from "@/lib/session";
 
 export type CourtSummary = {
   id: string;
@@ -45,6 +45,7 @@ export type CurrentMatchSummary = {
 
 export type CourtsOverviewData = {
   groupId: string | null;
+  groupCode: string | null;
   groupLabel: string;
   adminName: string | null;
   courtOptions: CourtOption[];
@@ -55,6 +56,7 @@ export type CourtsOverviewData = {
 export type CourtDetailData = {
   courtId: string | null;
   groupId: string | null;
+  groupCode: string | null;
   courtName: string;
   adminName: string | null;
   courtOptions: CourtOption[];
@@ -124,11 +126,13 @@ type GroupRow = {
   name: string;
   code: string;
   admin_name?: string | null;
+  admin_session_id?: string | null;
   courts: CourtRow[] | null;
 };
 
 const fallbackOverviewData: CourtsOverviewData = {
   groupId: null,
+  groupCode: null,
   groupLabel: "สนามทั้งหมด",
   adminName: null,
   courtOptions: [],
@@ -197,17 +201,17 @@ const getPlayerCountsByCourt = async (courtIds: string[]) => {
   return countsByCourt;
 };
 
-const getLatestGroupId = async (adminName: string | null) => {
+const getLatestGroupId = async (adminSessionId: string | null) => {
   const supabase = createServerSupabaseClient();
 
-  if (!supabase || !adminName) {
+  if (!supabase || !adminSessionId) {
     return null;
   }
 
   const { data, error } = await supabase
     .from("groups")
     .select("id")
-    .eq("admin_name", adminName)
+    .eq("admin_session_id", adminSessionId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle<{ id: string }>();
@@ -407,9 +411,9 @@ const getActiveTeamsByCourt = async (courtIds: string[]) => {
 
 export const getCourtsOverviewData = async (): Promise<CourtsOverviewData> => {
   const supabase = createServerSupabaseClient();
-  const adminName = await getCurrentAdminName();
+  const adminSession = await getCurrentAdminSession();
 
-  if (!adminName) {
+  if (!adminSession) {
     return {
       ...fallbackOverviewData,
       courts: [],
@@ -419,15 +423,15 @@ export const getCourtsOverviewData = async (): Promise<CourtsOverviewData> => {
   if (!supabase) {
     return {
       ...fallbackOverviewData,
-      adminName,
+      adminName: adminSession.adminName,
       courts: [],
     };
   }
 
   const { data, error } = await supabase
     .from("groups")
-    .select("id,name,code,admin_name,courts(id,court_number,status)")
-    .eq("admin_name", adminName)
+    .select("id,name,code,admin_name,admin_session_id,courts(id,court_number,status)")
+    .eq("admin_session_id", adminSession.adminSessionId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle<GroupRow>();
@@ -435,7 +439,7 @@ export const getCourtsOverviewData = async (): Promise<CourtsOverviewData> => {
   if (error || !data) {
     return {
       ...fallbackOverviewData,
-      adminName,
+      adminName: adminSession.adminName,
       courts: [],
     };
   }
@@ -464,8 +468,9 @@ export const getCourtsOverviewData = async (): Promise<CourtsOverviewData> => {
 
   return {
     groupId: data.id,
+    groupCode: data.code,
     groupLabel: "สนามทั้งหมด",
-    adminName,
+    adminName: adminSession.adminName,
     courtOptions: courts.map((court) => {
       return {
         id: court.id,
@@ -499,9 +504,9 @@ const getCourtById = async (courtId: string) => {
 
 const getCourtByNumberFromLatestGroup = async (
   courtNumber: number,
-  adminName: string | null
+  adminSessionId: string | null
 ) => {
-  const groupId = await getLatestGroupId(adminName);
+  const groupId = await getLatestGroupId(adminSessionId);
   const supabase = createServerSupabaseClient();
 
   if (!supabase || !groupId) {
@@ -526,11 +531,15 @@ export const getCourtDetailData = async (
   courtId: string
 ): Promise<CourtDetailData> => {
   const overviewData = await getCourtsOverviewData();
+  const adminSession = await getCurrentAdminSession();
   const adminName = overviewData.adminName;
   const numericCourtId = Number(courtId);
   const court =
     Number.isFinite(numericCourtId) && courtId.trim() !== ""
-      ? await getCourtByNumberFromLatestGroup(numericCourtId, adminName)
+      ? await getCourtByNumberFromLatestGroup(
+          numericCourtId,
+          adminSession?.adminSessionId ?? null
+        )
       : await getCourtById(courtId);
 
   const canAccessCourt = overviewData.courtOptions.some((option) => {
@@ -541,6 +550,7 @@ export const getCourtDetailData = async (
     return {
       courtId: courtId,
       groupId: null,
+      groupCode: overviewData.groupCode,
       courtName: Number.isFinite(numericCourtId)
         ? buildCourtName(numericCourtId)
         : "สนามที่ 1",
@@ -567,6 +577,7 @@ export const getCourtDetailData = async (
   return {
     courtId: court.id,
     groupId: court.group_id,
+    groupCode: overviewData.groupCode,
     courtName: buildCourtName(court.court_number),
     adminName,
     courtOptions: overviewData.courtOptions,

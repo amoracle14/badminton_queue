@@ -1,4 +1,4 @@
-import JoinGroupScreen from "@/components/user/JoinGroupScreen";
+import { redirect } from "next/navigation";
 
 type JoinGroupPageProps = {
   params: Promise<{
@@ -9,7 +9,7 @@ type JoinGroupPageProps = {
 const JoinGroupPage = async ({ params }: JoinGroupPageProps) => {
   const { groupCode } = await params;
 
-  return <JoinGroupScreen groupCode={groupCode} />;
+  redirect(`/queue/${groupCode}`);
 };
 
 export default JoinGroupPage;

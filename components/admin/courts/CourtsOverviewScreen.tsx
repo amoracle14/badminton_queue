@@ -81,6 +81,7 @@ const CourtsOverviewScreen = ({ data }: CourtsOverviewScreenProps) => {
         label={data.groupLabel}
         courtOptions={data.courtOptions}
         includeAllOption
+        groupCode={data.groupCode}
       />
 
       <section className="px-4 pt-[22px]">

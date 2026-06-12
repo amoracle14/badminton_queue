@@ -23,7 +23,7 @@ const HomeMenuScreen = ({ adminName }: HomeMenuScreenProps) => {
             href="/groups/new"
             className="flex min-h-[138px] flex-col justify-between overflow-hidden rounded-[14px] bg-white p-4 shadow-[0_12px_30px_rgba(29,137,228,0.10)]"
           >
-            <Image src="/icons/users-team.svg" alt="" width={58} height={58} />
+            <Image src="/icons/menu-create-group.svg" alt="" width={78} height={58} />
             <span className="text-[15px] font-bold text-[var(--color-text)]">
               สร้างแก๊ง&ก๊วน
             </span>
@@ -33,7 +33,7 @@ const HomeMenuScreen = ({ adminName }: HomeMenuScreenProps) => {
             href="/join"
             className="flex min-h-[138px] flex-col justify-between overflow-hidden rounded-[14px] bg-white p-4 shadow-[0_12px_30px_rgba(29,137,228,0.10)]"
           >
-            <Image src="/icons/empty-players.svg" alt="" width={58} height={58} />
+            <Image src="/icons/menu-join-group.svg" alt="" width={78} height={58} />
             <span className="text-[15px] font-bold text-[var(--color-text)]">
               เข้าร่วมแก๊ง&ก๊วน
             </span>

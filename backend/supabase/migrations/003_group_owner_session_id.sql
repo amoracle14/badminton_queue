@@ -1,56 +1,14 @@
 -- ============================================================
--- AceCourt group owner + court booking flow
+-- AceCourt owner session id fix
 -- ============================================================
--- Run after the base schema and 001_win_queue_logic.sql.
--- This supports the prototype login-by-name flow before Supabase Auth is wired.
+-- Names are display values only. Ownership must use a generated session id
+-- so two admins with the same display name do not see each other's groups.
 
 alter table public.groups
-  alter column admin_id drop not null,
-  add column if not exists admin_name text,
-  add column if not exists admin_session_id text,
-  add column if not exists duration_hours numeric(5,2) not null default 1;
-
-alter table public.courts
-  add column if not exists scheduled_at timestamptz,
-  add column if not exists duration_hours numeric(5,2) not null default 1;
-
-create index if not exists idx_groups_admin_name_created_at
-  on public.groups (admin_name, created_at desc);
+  add column if not exists admin_session_id text;
 
 create index if not exists idx_groups_admin_session_created_at
   on public.groups (admin_session_id, created_at desc);
-
-create index if not exists idx_courts_booking_lookup
-  on public.courts (court_number, scheduled_at, duration_hours);
-
-create or replace function public.has_court_booking_conflict(
-  p_venue_name text,
-  p_court_number int2,
-  p_scheduled_at timestamptz,
-  p_duration_hours numeric,
-  p_excluded_group_id uuid default null
-)
-returns boolean
-language sql
-stable
-set search_path = public
-as $$
-  select exists (
-    select 1
-    from public.courts c
-    join public.groups g on g.id = c.group_id
-    where lower(coalesce(g.venue_name, '')) = lower(coalesce(p_venue_name, ''))
-      and c.court_number = p_court_number
-      and (p_excluded_group_id is null or g.id <> p_excluded_group_id)
-      and c.scheduled_at is not null
-      and p_scheduled_at < (
-        c.scheduled_at + (coalesce(c.duration_hours, g.duration_hours, 1)::text || ' hours')::interval
-      )
-      and c.scheduled_at < (
-        p_scheduled_at + (p_duration_hours::text || ' hours')::interval
-      )
-  );
-$$;
 
 drop function if exists public.create_admin_group_with_court(
   text,
